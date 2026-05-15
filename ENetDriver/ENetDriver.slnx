@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="../Example_ENetDriver/Example_ENetDriver.csproj" />
+  <Project Path="ENetDriver.csproj" />
+</Solution>
