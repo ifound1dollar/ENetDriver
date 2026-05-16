@@ -2,6 +2,7 @@
 using ENet_Driver.Data;
 using ENet_Driver.Network;
 using ENetDriver;
+using ENetDriver.Config;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -29,160 +30,60 @@ namespace ENet_Driver.Network
 
         #endregion
 
+        private bool isRunning = false;
+
         // REQUIRED QUEUE REFERENCES
-        private bool isQueueRefsSetup   = false;
         private BlockingCollection<NetSendObject> netSendQueue = null!;
         private BlockingCollection<NetRecvObject> netRecvQueue = null!;
 
-        // REQUIRED HOST DATA
-        private bool isHostSetup        = false;
+        // CONFIGURATION
+        private ServerConfig config;
         private Host serverHost = null!;
-        private Address address;
-
-        // OPTIONAL HOST PARAMETERS
-        private int peerLimit           = 64;
-        private int channelLimit        = 2;
-
-        // OPTIONAL PEER PING/TIMEOUT PARAMETERS
-        private uint pingIntervalMS     = 5000;     // ENet default: 500
-        private uint pingAttemptLimit   = 5;        // ENet default: 32
-        private uint timeoutMinimumMS   = 10000;    // ENet default: 5000
-        private uint timeoutMaximumMS   = 30000;    // ENet default: 30000
-
-        // OPTIONAL POLL (RUN) TIME LIMITS
-        private int maxPollTimeoutMS    = 1000;
-        private int minPollTimeoutMS    = 100;
 
         // PEER CONTAINERS
         private readonly Dictionary<uint, PeerData> clientsById = [];
         private readonly Dictionary<string, PeerData> clientsByAddress = [];
 
-        // The logger method used by this class. This is explicitly set by the Driver using SetLogger() below.
-        private Action<string> _logger = null!;
-
-        internal ENetServer()
+        internal ENetServer(ServerConfig config)
         {
-            
+            this.config = config;
         }
 
         /// <summary>
-        /// Gets the enet Address object associated with this server. Will be uninitialized until SetHostParameters() is called.
+        /// Gets the network port that this server is configured to listen on. Will not return a valid port until
+        ///  SetConfiguration() is called (will return 0).
+        /// </summary>
+        /// <returns> The network port that this server will listen on, or 0 if not yet configured. </returns>
+        internal ushort GetPort()
+        {
+            // Returns port if serverConfig is non-null (using null-conditional operator ?.), else returns 0 (using null-coalescing operator ??).
+            return config?.Port ?? 0;
+        }
+
+        /// <summary>
+        /// Gets the configuration object (ServerConfig) used by this server. Returns null if called before
+        ///  SetConfiguration() is called.
         /// </summary>
         /// <returns></returns>
-        internal Address GetAddress()
+        public ServerConfig GetConfiguration()
         {
-            return address;
+            return config;
         }
 
 
 
         #region Setup / Start / Stop Operations
 
-        #region Required Setup
-
         /// <summary>
         /// Sets references to thread-safe queues.
         /// </summary>
         /// <param name="netSendQueue"> Reference to network send BlockingCollection. </param>
         /// <param name="netRecvQueue"> Reference to network receive BlockingCollection. </param>
-        internal void SetRequiredQueueReferences(BlockingCollection<NetSendObject> netSendQueue, BlockingCollection<NetRecvObject> netRecvQueue)
+        internal void SetQueueReferences(BlockingCollection<NetSendObject> netSendQueue, BlockingCollection<NetRecvObject> netRecvQueue)
         {
             this.netSendQueue = netSendQueue;
             this.netRecvQueue = netRecvQueue;
-
-            isQueueRefsSetup = true;
         }
-
-        /// <summary>
-        /// Sets listening port for the ENetServer. Listening address is irrelevant because we listen on our public IP address.
-        /// </summary>
-        /// <param name="port"> Port that the host should listen on. </param>
-        internal void SetRequiredHostListenPort(ushort port)
-        {
-            // Address for this server Host.
-            address = default;
-            address.Port = port;                // Actual port server will listen on.
-
-            isHostSetup = true;
-        }
-
-        /// <summary>
-        /// Sets the output (print) method for logging use by the data processor. This method must be called by the Driver
-        ///  on object initialization.
-        /// </summary>
-        /// <param name="logMethod"> The method to use for logging. Must accept a string argument and return void. </param>
-        internal void SetLogger(Action<string> logMethod)
-        {
-            _logger = logMethod;
-        }
-
-        #endregion
-
-        #region Optional Setup
-
-        /// <summary>
-        /// OPTIONAL: Sets maximum peer limit and maximum channel limit for the ENet Host. Peer limit only applies to
-        ///  connected peers; once a peer is disconnected, it is completely removed from consideration.
-        /// </summary>
-        /// <param name="peerLimit"> Maximum number of peers that can be connected at once (library limits to 4095). </param>
-        /// <param name="channelLimit"> Maximum number of channels that the host will communicate on with peers. Default 2. </param>
-        internal void SetOptionalHostSettings(int peerLimit, int channelLimit)
-        {
-            // IMPORTANT: Peer limit only applies to connected peers. Once a peer is fully disconnected, ENet
-            //  completely disposes the object and no longer considers it at all. Host.PeersCount reflects this
-            //  disposal (as soon as a disconnect or timeout event is received and dispatched, PeersCount is
-            //  updated.
-
-            // Log error and set default if parameters are invalid.
-            if (peerLimit < 1 || peerLimit > 4095 || channelLimit < 1 || channelLimit > 255)
-            {
-                _logger.Invoke($"[ENetServer] Maximum peer limit must be in range 1-4095, and maximum channel" +
-                    $" limit must be in range 1-255. Defaulting to peerLimit of {this.peerLimit}, channelLimit of {this.channelLimit}.");
-                return;
-            }
-
-            // If valid, simply set fields.
-            this.peerLimit = peerLimit;
-            this.channelLimit = channelLimit;
-        }
-
-        /// <summary>
-        /// OPTIONAL: Sets ping and timeout parameters for all Peers which connect to this Host.
-        /// </summary>
-        /// <param name="pingIntervalMS"> Interval in milliseconds to send pings to the client peer. </param>
-        /// <param name="pingAttemptLimit"> Maximum (minimum?) number of consecutive failed ping attempts before the peer 'times out'. </param>
-        /// <param name="timeoutMinimumMS"> Minimum duration in milliseconds that a ping has not been acknowledged before timing out. </param>
-        /// <param name="timeoutMaximumMS"> Maximum duration in milliseconds that a ping has not been acknowledged before timing out. </param>
-        internal void SetOptionalPeerTimeoutSettings(uint pingIntervalMS, uint pingAttemptLimit, uint timeoutMinimumMS, uint timeoutMaximumMS)
-        {
-            this.pingIntervalMS = pingIntervalMS;
-            this.pingAttemptLimit = pingAttemptLimit;
-            this.timeoutMinimumMS = timeoutMinimumMS;
-            this.timeoutMaximumMS = timeoutMaximumMS;
-        }
-
-        /// <summary>
-        /// OPTIONAL: Configures run (poll) time limits. Sets maximum and minimum poll duration fields,
-        ///  ensuring smooth looping and avoiding potential hangs.
-        /// </summary>
-        /// <param name="maxPollTimeoutMS"> The maximum duration in ms that the server can remain in one polling mode (ex. receive or send). Default 1000ms. </param>
-        /// <param name="minPollTimeoutMS"> The minimum duration in ms that the server can remain in one polling mode (ex. receive or send). Default 100ms. </param>
-        internal void SetOptionalPollIntervals(int maxPollTimeoutMS, int minPollTimeoutMS)
-        {
-            // Log error and set default if parameters are invalid.
-            if (maxPollTimeoutMS <= 0 || minPollTimeoutMS <= 0 || maxPollTimeoutMS < minPollTimeoutMS)
-            {
-                _logger.Invoke($"[ENetServer] Maximum and minimum poll timeout values must be greater than zero," +
-                    $" and maximum must be greater than minimum. Defaulting to {this.maxPollTimeoutMS}ms max, {this.minPollTimeoutMS}ms min.");
-                return;
-            }
-
-            // If valid, simply set fields.
-            this.maxPollTimeoutMS = maxPollTimeoutMS;
-            this.minPollTimeoutMS = minPollTimeoutMS;
-        }
-
-        #endregion
 
         /// <summary>
         /// Starts server Host to begin listening on the designated port.
@@ -190,15 +91,20 @@ namespace ENet_Driver.Network
         private void Start()
         {
             // Throw exception if not yet initialized.
-            if (!isQueueRefsSetup || !isHostSetup)
+            if (netSendQueue == null || netRecvQueue == null)
             {
                 throw new InvalidOperationException("Cannot start server which is not yet initialized (must" +
-                    " call SetQueueReferences() and SetHostParameters() before starting server.");
+                    " call SetQueueReferences() and SetConfiguration() before starting server.");
             }
 
             // Create server host with address, port, and other Host arguments.
+            Address address = default;
+            address.Port = config.Port;
             serverHost = new();
-            serverHost.Create(address, peerLimit, channelLimit, 0u, 0u, 1024*1024);     // No limits, and use default enet.h buffer size.
+            // No bandwidth limits (0u for both), and use default enet.h buffer size (1024*1024).
+            serverHost.Create(address, config.PeerLimit, config.ChannelLimit, 0u, 0u, 1024*1024);
+
+            isRunning = true;
         }
 
         /// <summary>
@@ -236,6 +142,8 @@ namespace ENet_Driver.Network
             // Finally, flush and dispose server host.
             serverHost.Flush();
             serverHost.Dispose();
+
+            isRunning = false;
         }
 
         #endregion
@@ -283,8 +191,8 @@ namespace ENet_Driver.Network
             }
             catch (Exception e)
             {
-                _logger.Invoke($"[EXCEPTION] :: {e}.");
-                _logger.Invoke("[EXCEPTION] Stopping ENetServer thread.");
+                config.Logger.Invoke($"[EXCEPTION] :: {e}.");
+                config.Logger.Invoke("[EXCEPTION] Stopping ENetServer thread.");
             }
         }
 
@@ -301,7 +209,7 @@ namespace ENet_Driver.Network
             stopwatch.Restart();
 
             // Loop only for poll maximum to prevent getting stuck on incoming.
-            while (stopwatch.ElapsedMilliseconds < maxPollTimeoutMS)
+            while (stopwatch.ElapsedMilliseconds < config.MaxPollTimeMS)
             {
                 /* ----- CHECKEVENTS DOCUMENTATION -----
                  * Run CheckEvents() to dispatch incoming events that were enqueued by Service() but were not immediately
@@ -330,7 +238,7 @@ namespace ENet_Driver.Network
                     //  maximum poll duration after the return, which would leave a delay between when the incoming
                     //  event is received and when the associated event is actually dispatched.
                     */
-                    if (serverHost.Service(minPollTimeoutMS, out netEvent) <= 0) return;
+                    if (serverHost.Service(config.MinPollTimeMS, out netEvent) <= 0) return;
                 }
 
                 // Handle event dispatched by CheckEvents() or Service() (both dispatch events the same way).
@@ -371,7 +279,7 @@ namespace ENet_Driver.Network
             stopwatch.Restart();
 
             // Loop only for poll maximum duration to prevent getting stuck on outgoing.
-            while (stopwatch.ElapsedMilliseconds < maxPollTimeoutMS)
+            while (stopwatch.ElapsedMilliseconds < config.MaxPollTimeMS)
             {
                 /* ----- TRYTAKE DOCUMENTATION -----
                 // Try to dequeue an item from the queue. Immediately returns the item if successful, otherwise stops
@@ -381,7 +289,7 @@ namespace ENet_Driver.Network
                 // If no item is found before the timeout, then we will immediately break and flip back to processing
                 //  incoming events (no reason to sit here idle with no items to take).
                 */
-                if (!netSendQueue.TryTake(out NetSendObject? item, minPollTimeoutMS))
+                if (!netSendQueue.TryTake(out NetSendObject? item, config.MinPollTimeMS))
                 {
                     return;     // NO ITEM AVAILABLE TO TAKE/DEQUEUE - RETURN TO DISPATCH INCOMING EVENTS
                 }
@@ -423,8 +331,8 @@ namespace ENet_Driver.Network
             clientsByAddress.Add(key, peerData);
 
             // Set ping interval and timeout parameters for the Peer.
-            peer.PingInterval(pingIntervalMS);
-            peer.Timeout(pingAttemptLimit, timeoutMinimumMS, timeoutMaximumMS);     // Default 32, 5000, 30000
+            peer.PingInterval(config.PeerTimeoutPingIntervalMS);
+            peer.Timeout(config.PeerTimeoutPingAttemptLimit, config.PeerTimeoutMinimumMS, config.PeerTimeoutMaximumMS);
 
             // Create new NetRecvObject and enqueue for data processing.
             NetRecvObject obj = NetRecvObject.CreateFromConnect(peer.ID, peer.IP, peer.Port, connectEvent.Data);
@@ -520,7 +428,7 @@ namespace ENet_Driver.Network
             }
 
             // If peer does not exist in clients Dictionary, log error.
-            _logger.Invoke($"[ENetServer] Tried to disconnect Peer with ID {netSendObject.PeerID}, but no peer with matching ID was found.");
+            config.Logger.Invoke($"[ENetServer] Tried to disconnect Peer with ID {netSendObject.PeerID}, but no peer with matching ID was found.");
         }
 
         /// <summary>
@@ -553,7 +461,7 @@ namespace ENet_Driver.Network
             }
 
             // If peer does not exist in clients Dictionary, log error.
-            _logger.Invoke($"[ENetServer] Tried to message Peer with ID {netSendObject.PeerID}, but no peer with matching ID was found.");
+            config.Logger.Invoke($"[ENetServer] Tried to message Peer with ID {netSendObject.PeerID}, but no peer with matching ID was found.");
         }
 
         #endregion

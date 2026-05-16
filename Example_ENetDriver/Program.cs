@@ -1,4 +1,5 @@
 ﻿using ENetDriver;
+using ENetDriver.Config;
 
 namespace Example_ENetDriver
 {
@@ -28,14 +29,21 @@ namespace Example_ENetDriver
                 }
 
                 // Create ExampleDataProcessor instance and pass to Driver, then configure optional settings and start the Driver.
-                ExampleDataProcessor processor = new();
-                driver.Initialize(processor, userPort)
-                    .SetOptionalHostSettings(64, 2)
-                    .SetOptionalPeerTimeoutSettings(5000, 5, 10000, 30000)
-                    .SetOptionalPollIntervals(100, 10)
+                DataProcessorConfig dataProcessorConfig = new DataProcessorConfig.Builder()
+                    .SetPollTimeIntervals(10, 100)
                     //.SetHealthLoggingInterval(10)
-                    .SetOptionalLogger(Console.WriteLine);
-                driver.StartDriver();
+                    .Build();
+                ExampleDataProcessor processor = new(dataProcessorConfig);
+                ServerConfig serverConfig = new ServerConfig.Builder()
+                    .SetPort(userPort)
+                    .SetPeerLimit(64)
+                    .SetChannelLimit(2)
+                    .SetPeerTimeoutSettings(5000, 5, 10000, 30000)
+                    .SetPollTimeIntervals(10, 100)
+                    .Build();
+                driver.Initialize(processor, serverConfig);
+
+                driver.StartThreadedOperations();
 
 
 
@@ -72,7 +80,7 @@ namespace Example_ENetDriver
             }
             finally
             {
-                driver.StopDriver();
+                driver.StopThreadedOperations();
                 driver.Deinitialize();
             }
         }

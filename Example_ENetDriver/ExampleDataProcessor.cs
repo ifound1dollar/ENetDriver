@@ -1,6 +1,7 @@
 ﻿using ENet_Driver;
 using ENet_Driver.Data;
 using ENetDriver;
+using ENetDriver.Config;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -9,6 +10,11 @@ namespace Example_ENetDriver
 {
     internal class ExampleDataProcessor : AbstractDataProcessor
     {
+        public ExampleDataProcessor(DataProcessorConfig config) : base(config)
+        {
+            // We must call base constructor with our config.
+        }
+
         protected override void ProcessIncomingData(NetRecvObject recvObject)
         {
             switch (recvObject.ActionType)

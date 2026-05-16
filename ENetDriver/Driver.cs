@@ -1,6 +1,7 @@
 ﻿using ENet_Driver;
 using ENet_Driver.Data;
 using ENet_Driver.Network;
+using ENetDriver.Config;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -73,40 +74,35 @@ namespace ENetDriver
         private NetworkThreadWorker _networkThreadWorker = null!;
 
         private State _state;
-        private Action<string> _logger = Console.WriteLine;
 
 
 
-        #region Initialization / Deinitialization
+        #region Public: Initialization/Deinitialization and Start/Stop
 
         /// <summary>
-        /// Initializes Driver as server, initializing and configuring thread workers. Also initializes ENet.
-        ///  Returns a Driver instance so optional configuration methods can be fluently called immediately.
-        /// IMPORTANT: This method must be passed an instance of a user-defined class that inherits from
-        ///  AbstractDataProcessor, which will actually process incoming data. AbstractDataProcessor only
-        ///  implements basic run and  enqueue/dequeue operations; the user-defined subclass must implement
-        ///  logic accordingly.
+        /// Initializes the Driver and the underlying ENet native library. Requires a configured instance of a
+        ///  user-defined class which derives from AbstractDataProcessor; this user-defined class will perform all
+        ///  incoming and outgoing command and message logic (AbstractDataProcessor only handles backend operation -
+        ///  all actual logic must be implemented by the user in the concrete subclass). This method also expects
+        ///  configuration settings for the server host (data processor will already be configured on initialization).
         /// </summary>
-        /// <param name="processorInstance"> Configured instance of user-defined class that inherits from AbstractDataProcessor. </param>
-        /// <param name="port"> Port to run the ENet host on (IP address is irrelevant for listening socket). </param>
-        public Driver Initialize(AbstractDataProcessor processorInstance, ushort port)
+        /// <param name="processorInstance"> Instance of user-defined class that inherits from AbstractDataProcessor. All data processing logic should be defined in this class. </param>
+        /// <param name="serverConfig"> The configuration settings that will be used by the server host. </param>
+        public void Initialize(AbstractDataProcessor processorInstance, ServerConfig serverConfig)
         {
             // Throw exception if Driver has already been initialized.
             if (_state != State.Uninitialized)
             {
-                _logger.Invoke("Failed to initialize Driver - Driver already initialized.");
-                return instance;
+                throw new InvalidOperationException("Cannot initialize driver again once it has already been initialized.");
             }
 
             // Initialize ENet and thread workers, then set Driver state.
             ENet.Library.Initialize();
 
-            _processThreadWorker = new ProcessThreadWorker(processorInstance, _logger);
-            _networkThreadWorker = new NetworkThreadWorker(port, _logger);
+            _processThreadWorker = new ProcessThreadWorker(processorInstance);
+            _networkThreadWorker = new NetworkThreadWorker(serverConfig);
 
             _state = State.Initialized;
-
-            return instance;
         }
 
         /// <summary>
@@ -120,116 +116,12 @@ namespace ENetDriver
             _state = State.Uninitialized;
         }
 
-        #endregion
-
-        #region Optional Setup
-
         /// <summary>
-        /// Configures optional host settings for the ENetServer, like peer and channel limits. Cannot be called before Initialize().
+        /// Starts worker threads for data processing and network operations. IMPORTANT: This method simply starts the
+        ///  threads, but does not block. It is the responsibility of the caller to keep the application running while
+        ///  threaded operations are active.
         /// </summary>
-        /// <param name="peerLimit"> Maximum number of peers that can be connected at once (library limits to 4095). Default 64. </param>
-        /// <param name="channelLimit"> Maximum number of channels that the host will communicate on with peers. Default 2. </param>
-        public Driver SetOptionalHostSettings(int peerLimit = 64, int channelLimit = 2)
-        {
-            // Prevent attempting to set Worker settings if not yet initialized (null until initialized).
-            if (_state == State.Uninitialized)
-            {
-                _logger.Invoke("[Driver] Cannot set optional host settings - Driver not yet initialized.");
-                return instance;
-            }
-
-            _networkThreadWorker.SetOptionalHostSettings(peerLimit, channelLimit);
-            return instance;
-        }
-
-        /// <summary>
-        /// Configures optional peer ping and timeout settings for the ENetServer. Cannot be called before Initialize().
-        /// </summary>
-        /// <param name="pingIntervalMS"> Interval in milliseconds to send pings to the client peer. Default 5000ms. </param>
-        /// <param name="pingAttemptLimit"> Maximum (minimum?) number of consecutive failed ping attempts before the peer 'times out'. Default 5. </param>
-        /// <param name="timeoutMinimumMS"> Minimum duration in milliseconds that a ping has not been acknowledged before timing out. Default 10000ms. </param>
-        /// <param name="timeoutMaximumMS"> Maximum duration in milliseconds that a ping has not been acknowledged before timing out. Default 30000ms. </param>
-        public Driver SetOptionalPeerTimeoutSettings(uint pingIntervalMS = 5000, uint pingAttemptLimit = 5,
-            uint timeoutMinimumMS = 10000, uint timeoutMaximumMS = 30000)
-        {
-            // Prevent attempting to set Worker settings if not yet initialized (null until initialized).
-            if (_state == State.Uninitialized)
-            {
-                _logger.Invoke("[Driver] Cannot set optional peer timeout settings - Driver not yet initialized.");
-                return instance;
-            }
-
-            _networkThreadWorker.SetOptionalPeerTimeoutSettings(pingIntervalMS, pingAttemptLimit, timeoutMinimumMS, timeoutMaximumMS);
-            return instance;
-        }
-
-        /// <summary>
-        /// Configures optional poll (run) time limits for both the DataProcessor and the ENetServer. This limits
-        ///  the amount of time that they can remain in a single mode (ex. incoming or outgoing command handling),
-        ///  preventing unexpected hangs in certain situations. Cannot be called before Initialize().
-        /// </summary>
-        /// <param name="maxPollTimeoutMS"> The maximum duration in milliseconds that it can remain in one polling mode (ex. receive or send). Default 1000ms. </param>
-        /// <param name="minPollTimeoutMS"> The minimum duration in milliseconds that it can remain in one polling mode (ex. receive or send). Default 100ms. </param>
-        public Driver SetOptionalPollIntervals(int maxPollTimeoutMS = 1000, int minPollTimeoutMS = 100)
-        {
-            // Prevent attempting to set Worker settings if not yet initialized (null until initialized).
-            if (_state == State.Uninitialized)
-            {
-                _logger.Invoke("[Driver] Cannot set optional poll intervals - Driver not yet initialized.");
-                return instance;
-            }
-
-            // Set poll intervals for both workers.
-            _processThreadWorker.SetOptionalPollIntervals(maxPollTimeoutMS, minPollTimeoutMS);
-            _networkThreadWorker.SetOptionalPollIntervals(maxPollTimeoutMS, minPollTimeoutMS);
-            return instance;
-        }
-
-        #endregion
-
-        #region Optional Logging Configuration
-
-        /// <summary>
-        /// Optionally sets the interval to log health tracking information for the data processor. Will output data like
-        ///  average items remaining in queue at each interval and average milliseconds taken to process all incoming
-        ///  messages each interval. Set interval to 0 to disable health information logging.
-        /// </summary>
-        /// <param name="intervalSeconds"> The interval (in seconds) to display health information to the log. Set to 0 to disable health logging. Default 60s. </param>
-        public Driver SetOptionalHealthLoggingInterval(uint intervalSeconds = 60)
-        {
-            _processThreadWorker.SetHealthLoggingInterval(intervalSeconds);
-            return instance;
-        }
-
-        /// <summary>
-        /// Optionally sets the output (print) method used for logging by this application. If not explicitly set
-        ///  here, defaults to Console.WriteLine().
-        /// </summary>
-        /// <param name="logMethod"> The method to use for logging. Must accept a string argument and return void. </param>
-        public Driver SetOptionalLogger(Action<string> logMethod)
-        {
-            // Prevent attempting to set Worker settings if not yet initialized (null until initialized).
-            if (_state == State.Uninitialized)
-            {
-                _logger.Invoke("[Driver] Cannot set logger - Driver not yet initialized.");
-                return instance;
-            }
-
-            _logger = logMethod;
-            _processThreadWorker.SetLogger(logMethod);
-            _networkThreadWorker.SetLogger(logMethod);
-
-            return instance;
-        }
-
-        #endregion
-
-        #region Start / Stop
-
-        /// <summary>
-        /// Starts worker threads for data processing and network operations.
-        /// </summary>
-        public void StartDriver()
+        public void StartThreadedOperations()
         {
             // Verify proper state.
             if (_state == State.Uninitialized)
@@ -252,7 +144,7 @@ namespace ENetDriver
         /// <summary>
         /// Stops data processor and network worker threads gracefully.
         /// </summary>
-        public void StopDriver()
+        public void StopThreadedOperations()
         {
             // If state is not Running, cannot stop threads.
             if (_state != State.Running)
@@ -279,23 +171,17 @@ namespace ENetDriver
         /// </summary>
         private class ProcessThreadWorker
         {
-            private readonly Thread thread;
-            private readonly AbstractDataProcessor processor;
+            private readonly Thread _thread;
+            private readonly AbstractDataProcessor _processor;
 
-            private Action<string> _logger;
-
-            internal ProcessThreadWorker(AbstractDataProcessor processorInstance, Action<string> logMethod)
+            internal ProcessThreadWorker(AbstractDataProcessor processorInstance)
             {
-                // Assign existing instance of AbstractDataProcessor subclass, then configure with REQUIRED parameters.
-                processor = processorInstance;
-                processor.SetRequiredQueueReferences(Instance.NetSendQueue, Instance.NetRecvQueue);
+                // Assign existing instance of AbstractDataProcessor subclass (already configured).
+                _processor = processorInstance;
+                _processor.SetRequiredQueueReferences(Instance.NetSendQueue, Instance.NetRecvQueue);
 
                 // Thread will call the DataProcessor.Run() method, which loops until commanded to stop.
-                thread = new(processor.Run);
-
-                // Sets the logger method used here and within the data processor instance. Must be explicitly called here.
-                processor.SetLogger(logMethod);
-                _logger = logMethod;
+                _thread = new(_processor.Run);
             }
 
 
@@ -305,8 +191,8 @@ namespace ENetDriver
             /// </summary>
             internal void StartThread()
             {
-                thread.Start();
-                _logger.Invoke("[STARTUP] Starting DataProcessor thread.");
+                _thread.Start();
+                _processor.GetConfiguration().Logger.Invoke("[STARTUP] Starting DataProcessor thread.");
             }
 
             /// <summary>
@@ -315,32 +201,14 @@ namespace ENetDriver
             internal void StopThread()
             {
                 // Commands the worker to stop, which will gracefully exit the threaded loop.
-                processor.CommandStop();
+                _processor.CommandStop();
 
                 // Wait for the DataProcessor.Run() function to return, then join the thread (BLOCKS).
-                _logger.Invoke("[EXIT] Waiting for DataProcessor thread to stop...");
-                thread.Join();
-                _logger.Invoke("[EXIT] DataProcessor thread stopped successfully.");
+                _processor.GetConfiguration().Logger.Invoke("[EXIT] Waiting for DataProcessor thread to stop...");
+                _thread.Join();
+                _processor.GetConfiguration().Logger.Invoke("[EXIT] DataProcessor thread stopped successfully.");
             }
 
-            #region Optional Setup
-
-            internal void SetOptionalPollIntervals(int maxPollTimeoutMS, int minPollTimeoutMS)
-            {
-                processor.SetOptionalPollIntervals(maxPollTimeoutMS, minPollTimeoutMS);
-            }
-
-            internal void SetLogger(Action<string> logMethod)
-            {
-                _logger = logMethod;
-            }
-
-            internal void SetHealthLoggingInterval(uint intervalSeconds)
-            {
-                processor.SetHealthLoggingInterval(intervalSeconds);
-            }
-
-            #endregion
         }
 
         /// <summary>
@@ -348,24 +216,17 @@ namespace ENetDriver
         /// </summary>
         private class NetworkThreadWorker
         {
-            private readonly Thread thread;
-            private readonly ENetServer server;
+            private readonly Thread _thread;
+            private readonly ENetServer _server;
 
-            private Action<string> _logger;
-
-            internal NetworkThreadWorker(ushort port, Action<string> logMethod)
+            internal NetworkThreadWorker(ServerConfig config)
             {
-                // Construct and initialize ENetServer then set REQUIRED parameters, but do not start yet.
-                server = new ENetServer();
-                server.SetRequiredQueueReferences(Instance.NetSendQueue, Instance.NetRecvQueue);
-                server.SetRequiredHostListenPort(port);
+                // Construct and initialize ENetServer then set configuration, but do not start yet.
+                _server = new ENetServer(config);
+                _server.SetQueueReferences(Instance.NetSendQueue, Instance.NetRecvQueue);
 
                 // Thread will call the ENetServer.Run() method, which actually starts the Host.
-                thread = new(server.Run);
-
-                // Sets the logger method used here and within the server instance. Must be explicitly called here.
-                server.SetLogger(logMethod);
-                _logger = logMethod;
+                _thread = new(_server.Run);
             }
 
 
@@ -375,9 +236,9 @@ namespace ENetDriver
             /// </summary>
             internal void StartThread()
             {
-                thread.Start();
+                _thread.Start();
 
-                _logger.Invoke($"[STARTUP] Starting server host thread on port {server.GetAddress().Port}.");
+                _server.GetConfiguration().Logger.Invoke($"[STARTUP] Starting server host thread on port {_server.GetPort()}.");
             }
 
             /// <summary>
@@ -386,67 +247,16 @@ namespace ENetDriver
             internal void StopThread()
             {
                 // Command the server to stop, which will gracefully exit the threaded loop.
-                server.CommandStop();
+                _server.CommandStop();
 
                 // Wait for the Run() function to return, then join the thread (BLOCKS).
-                _logger.Invoke("[EXIT] Waiting for ENetServer thread to stop...");
-                thread.Join();
-                _logger.Invoke("[EXIT] ENetServer thread stopped successfully.");
+                _server.GetConfiguration().Logger.Invoke("[EXIT] Waiting for ENetServer thread to stop...");
+                _thread.Join();
+                _server.GetConfiguration().Logger.Invoke("[EXIT] ENetServer thread stopped successfully.");
             }
-
-            #region Optional Setup
-
-            internal void SetOptionalHostSettings(int peerLimit, int channelLimit)
-            {
-                server.SetOptionalHostSettings(peerLimit, channelLimit);
-            }
-
-            internal void SetOptionalPeerTimeoutSettings(uint pingIntervalMS, uint pingAttemptLimit, uint timeoutMinimumMS, uint timeoutMaximumMS)
-            {
-                server.SetOptionalPeerTimeoutSettings(pingIntervalMS, pingAttemptLimit, timeoutMinimumMS, timeoutMaximumMS);
-            }
-
-            internal void SetOptionalPollIntervals(int maxPollTimeoutMS, int minPollTimeoutMS)
-            {
-                server.SetOptionalPollIntervals(maxPollTimeoutMS, minPollTimeoutMS);
-            }
-
-            internal void SetLogger(Action<string> logMethod)
-            {
-                _logger = logMethod;
-                server.SetLogger(logMethod);
-            }
-
-            #endregion
         }
 
         #endregion
 
-
-
-
-
-        ///             NETWORK DATA (STATUS) CODES
-        /// 0    | Default value from ENet, should only be used for ACK responses (ex. ACK from remote peer after successful user-initiated connect)
-        /// 
-        /// 100  | Successful peer-initiated connection
-        /// 101  | Successful self-initiated connection
-        /// 200  | Peer-initiated disconnect
-        /// 201  | Self-initiated disconnect
-        /// 300  | Peer-initiated disconnect on shutdown
-        /// 301  | Self-initiated disconnect on shutdown
-        /// 400  | Timeout
-        /// 1000 | Client checksum validation error
-        /// 1001 | Server checksum validation error
-        /// 1100 | Client login token validation error
-        /// 1101 | Server login token validation error
-        /// 1200 | Client validation ACK error
-        /// 1201 | Server validation ACK error
-        /// 1300 | Client missing login token to send
-        /// 1301 | Server missing login token to send
-        /// 1500 | Master server connection error
-        /// 2000 | Disallowed new connection
-        /// 2500 | Disconnect on message from unknown Peer
-        /// 3000 | Rejected blacklisted address
     }
 }

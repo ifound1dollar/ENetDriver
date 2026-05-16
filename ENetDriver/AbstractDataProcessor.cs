@@ -1,4 +1,6 @@
-﻿using ENet_Driver.Data;
+﻿using ENet;
+using ENet_Driver.Data;
+using ENetDriver.Config;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -26,28 +28,30 @@ namespace ENet_Driver
         #endregion
 
         // QUEUE REFERENCES
-        private bool isQueueRefsSetup = false;
         private BlockingCollection<NetSendObject> netSendQueue = null!;
         private BlockingCollection<NetRecvObject> netRecvQueue = null!;
 
-        // POLL (LOOP) TIME LIMITS
-        private int maxPollTimeoutMS = 1000;
-        private int minPollTimeoutMS = 100;
-
-        // The logger method used by this class. This is explicitly set by the Driver using SetLogger() below.
-        private Action<string> _logger = null!;
+        // CONFIGURATION
+        private DataProcessorConfig config;
 
         // Health tracking information. Store the last 10 interval switches.
-        private int[] _lastTenRemainingCounts = new int[10];
         private int _lastTenIndex = 0;
+        private int[] _lastTenRemainingCounts = new int[10];
         private long[] _lastTenMillisecondsTaken = new long[10];
-        private uint _healthLoggingIntervalMS = 0;
 
-
-
-        protected AbstractDataProcessor()
+        protected AbstractDataProcessor(DataProcessorConfig config)
         {
-            
+            this.config = config;
+        }
+
+        /// <summary>
+        /// Gets the configuration object (DataProcessorConfig) used by this data processor. Returns null if called
+        ///  before SetConfiguration() is called.
+        /// </summary>
+        /// <returns></returns>
+        public DataProcessorConfig GetConfiguration()
+        {
+            return config;
         }
 
 
@@ -63,56 +67,15 @@ namespace ENet_Driver
         {
             this.netSendQueue = netSendQueue;
             this.netRecvQueue = netRecvQueue;
-
-            isQueueRefsSetup = true;
-        }
-
-        /// <summary>
-        /// Configures run (loop) behavior. Sets maximum and minimum poll duration fields, ensuring smooth looping
-        ///  and avoiding potential hangs.
-        /// </summary>
-        /// <param name="maxPollTimeoutMS"> The maximum duration in ms that the server can remain in one polling mode (ex. receive or send). </param>
-        /// <param name="minPollTimeoutMS"> The minimum duration in ms that the server can remain in one polling mode (ex. receive or send). </param>
-        internal void SetOptionalPollIntervals(int maxPollTimeoutMS, int minPollTimeoutMS)
-        {
-            // Log error and set default if parameters are invalid.
-            if (maxPollTimeoutMS <= 0 || minPollTimeoutMS <= 0 || maxPollTimeoutMS < minPollTimeoutMS)
-            {
-                _logger.Invoke($"[AbstractDataProcessor] Maximum and minimum poll timeout values must be greater than zero," +
-                    $" and maximum must be greater than minimum. Defaulting to {this.maxPollTimeoutMS}ms max, {this.minPollTimeoutMS}ms min.");
-            }
-
-            // If valid, simply set fields.
-            this.maxPollTimeoutMS = maxPollTimeoutMS;
-            this.minPollTimeoutMS = minPollTimeoutMS;
-        }
-
-        /// <summary>
-        /// Sets the output (print) method for logging use by the data processor. This method must be called by the Driver
-        ///  on object initialization.
-        /// </summary>
-        /// <param name="logMethod"> The method to use for logging. Must accept a string argument and return void. </param>
-        internal void SetLogger(Action<string> logMethod)
-        {
-            _logger = logMethod;
-        }
-
-        /// <summary>
-        /// Sets the interval to print queue health data to the log. Set to 0 to disable health logging.
-        /// </summary>
-        /// <param name="intervalSeconds"> The interval (in seconds) to print health data to the log. Set to 0 to disable health logging. </param>
-        internal void SetHealthLoggingInterval(uint intervalSeconds)
-        {
-            _healthLoggingIntervalMS = intervalSeconds * 1000;
         }
 
         private void Start()
         {
             // Throw exception if not yet initialized.
-            if (!isQueueRefsSetup)
+            if (netSendQueue == null || netRecvQueue == null)
             {
                 throw new InvalidOperationException("Cannot start data processor which is not yet initialized (must" +
-                    " call SetQueueReferences() before starting data processor.");
+                    " call SetQueueReferences() and SetConfiguration() before starting data processor.");
             }
         }
 
@@ -152,7 +115,7 @@ namespace ENet_Driver
                 {
                     // Restart stopwatch each loop, then loop until maximum timeout duration in milliseconds.
                     stopwatch.Restart();
-                    while (stopwatch.ElapsedMilliseconds < maxPollTimeoutMS)
+                    while (stopwatch.ElapsedMilliseconds < config.MaxPollTimeMS)
                     {
                         /* ----- TRYTAKE DOCUMENTATION -----
                         // Try to dequeue an item from the queue. Immediately returns the item if successful, otherwise stops
@@ -162,7 +125,7 @@ namespace ENet_Driver
                         // If no item is found before the timeout, then we will immediately break and flip back to processing
                         //  incoming events (no reason to sit here idle with no items to take).
                         */
-                        if (!netRecvQueue.TryTake(out NetRecvObject? item, minPollTimeoutMS))
+                        if (!netRecvQueue.TryTake(out NetRecvObject? item, config.MinPollTimeMS))
                         {
                             // NO ITEM AVAILABLE TO TAKE/DEQUEUE - BREAK FROM INNER LOOP
                             break;
@@ -173,7 +136,7 @@ namespace ENet_Driver
                     }
 
                     // Log our health data if it is enabled (interval > 0).
-                    if (_healthLoggingIntervalMS > 0)
+                    if (config.HealthLoggingInterval > 0)
                     {
                         // Update ring buffer index and then store current remaining count and elapsed milliseconds.
                         _lastTenIndex = (_lastTenIndex + 1) % 10;
@@ -181,11 +144,11 @@ namespace ENet_Driver
                         _lastTenMillisecondsTaken[_lastTenIndex] = stopwatch.ElapsedMilliseconds;
 
                         // If we have exceeded the health log interval, print stats to the log and reset timer.
-                        if (healthLogTimer.ElapsedMilliseconds >= _healthLoggingIntervalMS)
+                        if (healthLogTimer.ElapsedMilliseconds >= config.HealthLoggingInterval)
                         {
                             double remainingAvg = _lastTenRemainingCounts.Sum() / 10.0d;
                             double millisecondsAvg = _lastTenMillisecondsTaken.Sum() / 10.0d;
-                            _logger.Invoke($"HEALTH DATA FOR LAST TEN INTERVALS:\n" +
+                            config.Logger.Invoke($"HEALTH DATA FOR LAST TEN INTERVALS:\n" +
                                 $"> Elements remaining in queue: {remainingAvg:f2}\n" +
                                 $"> Milliseconds taken: {millisecondsAvg:f2}");
 
@@ -198,8 +161,8 @@ namespace ENet_Driver
             }
             catch (Exception e)
             {
-                _logger.Invoke($"[EXCEPTION] :: {e}.");
-                _logger.Invoke("[EXCEPTION] Stopping DataProcessor thread.");
+                config.Logger.Invoke($"[EXCEPTION] :: {e}.");
+                config.Logger.Invoke("[EXCEPTION] Stopping DataProcessor thread.");
             }
         }
 
@@ -214,7 +177,7 @@ namespace ENet_Driver
 
         protected void LogMessage(string message)
         {
-            _logger.Invoke(message);
+            config.Logger.Invoke(message);
         }
 
         #endregion
