@@ -1,8 +1,7 @@
 ﻿using ENet;
-using ENet_Driver.Data;
-using ENet_Driver.Network;
 using ENetDriver;
 using ENetDriver.Config;
+using ENetDriver.Data;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -12,7 +11,7 @@ using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ENet_Driver.Network
+namespace ENetDriver.Network
 {
     internal class ENetServer
     {

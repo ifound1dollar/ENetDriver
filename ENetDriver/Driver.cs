@@ -1,7 +1,6 @@
-﻿using ENet_Driver;
-using ENet_Driver.Data;
-using ENet_Driver.Network;
-using ENetDriver.Config;
+﻿using ENetDriver.Config;
+using ENetDriver.Data;
+using ENetDriver.Network;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -142,7 +141,8 @@ namespace ENetDriver
         }
 
         /// <summary>
-        /// Stops data processor and network worker threads gracefully.
+        /// Stops data processor and network worker threads gracefully. IMPORTANT: Threads stop gracefully in the background,
+        ///  this method does not block. It returns immediately while threads are shutting down.
         /// </summary>
         public void StopThreadedOperations()
         {

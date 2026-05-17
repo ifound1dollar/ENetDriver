@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ENet_Driver.Data
+namespace ENetDriver.Data
 {
     /// <summary>
     /// The ArrayBuffer class exists to allow efficient and robust writing to and reading from a

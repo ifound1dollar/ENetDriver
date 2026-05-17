@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ENet_Driver.Data
+namespace ENetDriver.Data
 {
     /// <summary>
     /// Data object for incoming command data like data uint (for non-message actions) and byte[] payload (for

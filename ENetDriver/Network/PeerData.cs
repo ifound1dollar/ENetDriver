@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ENet_Driver.Network
+namespace ENetDriver.Network
 {
     internal record class PeerData
     {

@@ -1,6 +1,6 @@
 ﻿using ENet;
-using ENet_Driver.Data;
 using ENetDriver.Config;
+using ENetDriver.Data;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -9,7 +9,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ENet_Driver
+namespace ENetDriver
 {
     public abstract class AbstractDataProcessor
     {
