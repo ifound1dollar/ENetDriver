@@ -1,4 +1,9 @@
 <Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="../.gitattributes" />
+    <File Path="../.gitignore" />
+    <File Path="../README.md" />
+  </Folder>
   <Project Path="../Example_ENetDriver/Example_ENetDriver.csproj" />
   <Project Path="ENetDriver.csproj" />
 </Solution>
