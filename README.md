@@ -1,6 +1,6 @@
 # ENetDriver
 
-This project is meant to be a plug-and-play multithreaded wrapper around the ENet reliable UDP library. By design, the ENet host/listener must run on a single thread, and this can cause a performance bottleneck with high traffic. For high-performance UDP communication with ENet, the application must devise a multithreaded solution to allow ENet network tasks to run on a dedicated thread isolated from application logic. This ENetDriver library intends to do just that, but in a way that abstracts the low-level/behind-the-scenes ENet operations from the application developer. A description of how the library works is below, followed by a basic user guide.
+This library is essentially a plug-and-play multithreaded wrapper around the ENet reliable UDP library. By design, the ENet host/listener must run on a single thread, and this can cause a performance bottleneck with high traffic. High-performance UDP communication with ENet requires that the application implements multithreading strategies to allow ENet network tasks to run on a dedicated thread isolated from application logic. This ENetDriver library intends to do just that, but in a way that abstracts the low-level/behind-the-scenes ENet operations from the application developer. A description of how the library works is below, followed by a general user guide.
 
 ## How It Works
 
@@ -19,7 +19,8 @@ Additionally, a handful of data objects are used by the library to communicate d
 ### ArrayBuffer examples
 Create empty ArrayBuffer and add a few items:
 ```csharp
-// Instantiate using default constructor, which allocates a byte[] of size 1024. Can use overloaded constructor to choose a specific size.
+// Instantiate using default constructor, which allocates a byte[] of size 1024.
+// Can use overloaded constructor to initialize byte[] to a specific size.
 ArrayBuffer buffer = new ArrayBuffer()
   .AddString("A string")
   .AddBool(true)
@@ -30,58 +31,61 @@ Create populated ArrayBuffer from payload byte[] and read items into variables:
 // Instantiate using overloaded construtor which accepts a byte[] and length integer.
 ArrayBuffer buffer = new ArrayBuffer(payloadBytes, payloadLength);
 
-// Read items into variables in the EXACT reverse order they were added. Will throw IndexOutOfRangeException if invalid read (wrong order, wrong type, or wrong number of elements).
-double d0 = buffer.ReadDouble();
-bool b0 = buffer.ReadBool();
-string s0 = buffer.ReadString();
+// Read items into variables in the EXACT reverse order they were added.
+// Will throw IndexOutOfRangeException if invalid read (wrong order, wrong type, or wrong number of elements).
+double d0 = buffer.ReadDouble();    // 10.0d
+bool b0 = buffer.ReadBool();        // true
+string s0 = buffer.ReadString();    // "A string"
 ```
 
-## User Guide
+___
 
-Using the library is meant to be as intuitive and easy-to-understand as possible. The most basic, high-level description of how to use the library is as follows (detailed description of each step will follow):
+# User Guide
+
+Using the library is meant to be as intuitive and easy-to-understand as possible. The most basic, high-level description of how to use the library is as follows (examples below):
 1. Implement a concrete data processor class which inherits from AbstractDataProcessor and overrides the required incoming command/message handler methods. This class is where the application logic should be.
 2. Create an instance of the DataProcessorConfig class to set up various configuration for the data processor. This configuration is used by the internal logic and is separate from any custom configuration that may be implemented in the user-defined concrete data processor class.
 3. Create an instance of the user-defined concrete data processor, which requires passing the previously-created DataProcessorConfig object to the AbstractDataProcessor's constructor to configure internal behavior.
 4. Create an instance of the ServerConfig class to set various configuration settings for the ENet host/listener. This is done the same way as the data processor configuration, but includes associated network-relevant settings.
 5. Initialize the Driver singleton class, passing it the previously-instantiated concrete data processor and server config instances. Note that this does not start the server host or the data processor, just initializes them with configuration settings.
-6. Start threaded operations within the Driver. This will start up both the data processor and host/listener threads, immediately allowing connections and listening for incoming messages. IMPORTANT: Starting the threads does *not* block the main thread; the user must ensure that the main thread remains running for as long as the driver is running.
+6. Start threaded operations within the Driver. This will start up both the data processor and host/listener threads, immediately allowing connections and listening for incoming commands/messages. IMPORTANT: Starting the threads does *not* block the main thread; the user must ensure that the main thread remains running for as long as the driver is running.
 7. **Once execution should stop,** explicitly command the Driver to stop threaded operations, then de-initialize the Driver before the application exits. IMPORTANT: The Driver's de-initialization method *must* be called before the application exits to ensure that the underlying ENet native library is successfully de-initialized.
 
-### EXAMPLE: Concrete Data Processor 
+### EXAMPLE: ConcreteDataProcessor class
 ```csharp
 public class ConcreteDataProcessor : AbstractDataProcessor
 {
-  public ExampleDataProcessor(DataProcessorConfig config) : base(config)
+  public ConcreteDataProcessor(DataProcessorConfig config) : base(config)
   {
-      // We must call base constructor with our config.
+    // We must call base constructor with our config.
   }
 
-  // This method is invoked by the internal library whenever an incoming command/message is received. Implementation 
+  // This method is invoked by the internal library whenever an incoming command/message is received. 
   protected override void ProcessIncomingData(NetRecvObject recvObject)
   {
-      switch (recvObject.ActionType)
-      {
-          case ENetAction.Connect:
-              {
-                  LogMessage($"New connection with peer at {recvObject.PeerIP}!");
-                  break;
-              }
-          case ENetAction.Disconnect:
-              {
-                  LogMessage($"Disconnected from peer at {recvObject.PeerIP}.");
-                  break;
-              }
-          case ENetAction.Timeout:
-              {
-                  LogMessage($"Timed out from peer at {recvObject.PeerIP}.");
-                  break;
-              }
-          case ENetAction.Message:
-              {
-                  LogMessage($"Message received from peer at {recvObject.PeerIP}. Message raw bytes: {recvObject.Bytes}");
-                  break;
-              }
-      }
+    switch (recvObject.ActionType)
+    {
+      case ENetAction.Connect:
+        {
+          LogMessage($"New connection with peer at {recvObject.PeerIP}!");
+          break;
+        }
+      case ENetAction.Disconnect:
+        {
+          LogMessage($"Disconnected from peer at {recvObject.PeerIP}.");
+          break;
+        }
+      case ENetAction.Timeout:
+        {
+          LogMessage($"Timed out from peer at {recvObject.PeerIP}.");
+          break;
+        }
+      case ENetAction.Message:
+        {
+          LogMessage($"Message received from peer at {recvObject.PeerIP}. Message raw bytes: {recvObject.Bytes}");
+          break;
+        }
+    }
   }
 
   // This user-defined 'send' method accepts the ID of the peer to message and a simple string. 
@@ -89,10 +93,10 @@ public class ConcreteDataProcessor : AbstractDataProcessor
   {
     LogMessage($"[COMMAND] Sending message to peer with id {id}...");
   
-    // Add null terminator to string, then use ArrayBuffer class to generate byte[] and enqueue.
+    // Add null terminator to string, then use ArrayBuffer class to generate payload byte[].
     message += '\0';
     ArrayBuffer buffer = new ArrayBuffer(message.Length * 2)
-        .AddString(message);
+      .AddString(message);
 
     // Create an outgoing NetSendObject for a message action, then use the AbstractDataProcessor's built-in EnqueueOneOutgoing to pass it to the ENet server.
     NetSendObject obj = NetSendObject.CreateForMessage(id, buffer.Bytes, buffer.Length);
@@ -100,3 +104,44 @@ public class ConcreteDataProcessor : AbstractDataProcessor
   }
 }
 ```
+
+### EXAMPLE: DataProcessorConfig usage and ConcreteDataProcessor instantiation
+```csharp
+// NOTE: All configuration settings have default values, so the user only needs to set their desired settings in the Builder.
+DataProcessorConfig dataProcessorConfig = new DataProcessorConfig.Builder()
+  .SetPollTimeIntervals(10, 100)        // Sets minimum and maximum time (ms) to spend before switching between incoming/outgoing contexts.
+  .SetHealthLoggingInterval(10)         // Sets the interval (seconds) between health logging output (prints performance health data).
+  .Build();
+ConcreteDataProcessor processor = new ConcreteDataProcessor(dataProcessorConfig);
+```
+
+### EXAMPLE: ServerConfig usage
+```csharp
+// NOTE: All configuration settings have default values, so the user only needs to set their desired settings in the Builder.
+ServerConfig serverConfig = new ServerConfig.Builder()
+  .SetPort(7777)
+  .SetPeerLimit(64)                                // Must be in range 1-4095.
+  .SetChannelLimit(2)                              // Must be in range 1-255.
+  .SetPeerTimeoutSettings(5000, 5, 10000, 30000)   // Ping interval, maximum ping attempts, timeout minimum ms, timeout maximum ms.
+  .SetPollTimeIntervals(10, 100)                   // Sets the interval (seconds) between health logging output (prints performance health data).
+  .Build();
+```
+
+### EXAMPLE: Driver initialization and start
+```csharp
+var driver = ENetDriver.Driver.Instance;
+driver.Initialize(processor, serverConfig);
+driver.StartThreadedOperations();
+
+// After starting threaded operations, the main thread must remain running until the driver is stopped and de-initialized.
+```
+
+### EXAMPLE: Driver stop and de-initialization
+```csharp
+// SOME MAIN THREAD BLOCKING LOGIC ABOVE
+
+driver.StopThreadedOperations();    // Threads stop gracefully in the background, this method does not block.
+driver.Deinitialize();
+```
+
+
