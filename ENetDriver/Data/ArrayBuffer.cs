@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -82,8 +83,13 @@ namespace ENetDriver.Data
 
         private void ExpandCapacity()
         {
-            // Initialize array with 2x current capacity, then copy current contents over and replace reference.
-            byte[] expanded = new byte[Bytes.Length * 2];
+            // Calculate target length, which is double the currently length with an enforced minimum of 13.
+            // Minimum size 13 ensures the largest primitives (size 8) can always be added (ex. allocated length 2 but trying
+            //  to add a double, 2x capacity would only create a size 4 array and throw an OutOfBoundsException).
+            int targetLength = Math.Max(Bytes.Length * 2, 13);
+
+            // Initialize array with target length, then copy current contents over and replace reference.
+            byte[] expanded = new byte[targetLength];
             Buffer.BlockCopy(Bytes, 0, expanded, 0, Length + 1);
             Bytes = expanded;
         }
@@ -130,9 +136,9 @@ namespace ENetDriver.Data
                 ExpandCapacity();
             }
 
-            // Convert short to array of size 2, then copy directly into main byte[].
-            byte[] temp = BitConverter.GetBytes(value);
-            Buffer.BlockCopy(temp, 0, Bytes, Length, 2);
+            // To avoid allocating new memory, create a span at our current byte[] index and directly copy bytes.
+            Span<byte> target = Bytes.AsSpan(Length, 2);                // Span starts at Length, which is next empty index.
+            BinaryPrimitives.WriteInt16LittleEndian(target, value);     // We will use little-endian format, as is standard.
             Length += 2;
 
             return this;
@@ -148,7 +154,9 @@ namespace ENetDriver.Data
                 throw new IndexOutOfRangeException("Cannot read short - index out of range.");
             }
 
-            return BitConverter.ToInt16(Bytes, Length);
+            // Use ReadOnlySpan insted of BitConverter to avoid endian-ness issues and potential array slice GC.
+            ReadOnlySpan<byte> target = Bytes.AsSpan(Length, 2);        // We have already decremented length, so index is correct.
+            return BinaryPrimitives.ReadInt16LittleEndian(target);      // Read as little-endian, aligning with how it was written.
         }
 
         #endregion
@@ -162,9 +170,9 @@ namespace ENetDriver.Data
                 ExpandCapacity();
             }
 
-            // Convert ushort to array of size 2, then copy directly into main byte[].
-            byte[] temp = BitConverter.GetBytes(value);
-            Buffer.BlockCopy(temp, 0, Bytes, Length, 2);
+            // To avoid allocating new memory, create a span at our current byte[] index and directly copy bytes.
+            Span<byte> target = Bytes.AsSpan(Length, 2);                // Span starts at Length, which is next empty index.
+            BinaryPrimitives.WriteUInt16LittleEndian(target, value);    // We will use little-endian format, as is standard.
             Length += 2;
 
             return this;
@@ -180,7 +188,9 @@ namespace ENetDriver.Data
                 throw new IndexOutOfRangeException("Cannot read ushort - index out of range.");
             }
 
-            return BitConverter.ToUInt16(Bytes, Length);
+            // Use ReadOnlySpan insted of BitConverter to avoid endian-ness issues and potential array slice GC.
+            ReadOnlySpan<byte> target = Bytes.AsSpan(Length, 2);        // We have already decremented length, so index is correct.
+            return BinaryPrimitives.ReadUInt16LittleEndian(target);     // Read as little-endian, aligning with how it was written.
         }
 
         #endregion
@@ -194,9 +204,9 @@ namespace ENetDriver.Data
                 ExpandCapacity();
             }
 
-            // Convert int to array of size 4, then copy directly into main byte[].
-            byte[] temp = BitConverter.GetBytes(value);
-            Buffer.BlockCopy(temp, 0, Bytes, Length, 4);
+            // To avoid allocating new memory, create a span at our current byte[] index and directly copy bytes.
+            Span<byte> target = Bytes.AsSpan(Length, 4);            // Span starts at Length, which is next empty index.
+            BinaryPrimitives.WriteInt32LittleEndian(target, value); // We will use little-endian format, as is standard.
             Length += 4;
 
             return this;
@@ -212,7 +222,9 @@ namespace ENetDriver.Data
                 throw new IndexOutOfRangeException("Cannot read int - index out of range.");
             }
 
-            return BitConverter.ToInt32(Bytes, Length);
+            // Use ReadOnlySpan insted of BitConverter to avoid endian-ness issues and potential array slice GC.
+            ReadOnlySpan<byte> target = Bytes.AsSpan(Length, 4);        // We have already decremented length, so index is correct.
+            return BinaryPrimitives.ReadInt32LittleEndian(target);      // Read as little-endian, aligning with how it was written.
         }
 
         #endregion
@@ -243,9 +255,9 @@ namespace ENetDriver.Data
                 ExpandCapacity();
             }
 
-            // Convert uint to array of size 4, then copy directly into main byte[].
-            byte[] temp = BitConverter.GetBytes(value);
-            Buffer.BlockCopy(temp, 0, Bytes, Length, 4);
+            // To avoid allocating new memory, create a span at our current byte[] index and directly copy bytes.
+            Span<byte> target = Bytes.AsSpan(Length, 4);                // Span starts at Length, which is next empty index.
+            BinaryPrimitives.WriteUInt32LittleEndian(target, value);    // We will use little-endian format, as is standard.
             Length += 4;
 
             return this;
@@ -261,7 +273,9 @@ namespace ENetDriver.Data
                 throw new IndexOutOfRangeException("Cannot read uint - index out of range.");
             }
 
-            return BitConverter.ToUInt32(Bytes, Length);
+            // Use ReadOnlySpan insted of BitConverter to avoid endian-ness issues and potential array slice GC.
+            ReadOnlySpan<byte> target = Bytes.AsSpan(Length, 4);        // We have already decremented length, so index is correct.
+            return BinaryPrimitives.ReadUInt32LittleEndian(target);     // Read as little-endian, aligning with how it was written.
         }
 
         #endregion
@@ -275,9 +289,9 @@ namespace ENetDriver.Data
                 ExpandCapacity();
             }
 
-            // Convert long to array of size 8, then copy directly into main byte[].
-            byte[] temp = BitConverter.GetBytes(value);
-            Buffer.BlockCopy(temp, 0, Bytes, Length, 8);
+            // To avoid allocating new memory, create a span at our current byte[] index and directly copy bytes.
+            Span<byte> target = Bytes.AsSpan(Length, 8);                // Span starts at Length, which is next empty index.
+            BinaryPrimitives.WriteInt64LittleEndian(target, value);     // We will use little-endian format, as is standard.
             Length += 8;
 
             return this;
@@ -293,7 +307,9 @@ namespace ENetDriver.Data
                 throw new IndexOutOfRangeException("Cannot read long - index out of range.");
             }
 
-            return BitConverter.ToInt64(Bytes, Length);
+            // Use ReadOnlySpan insted of BitConverter to avoid endian-ness issues and potential array slice GC.
+            ReadOnlySpan<byte> target = Bytes.AsSpan(Length, 8);        // We have already decremented length, so index is correct.
+            return BinaryPrimitives.ReadInt64LittleEndian(target);      // Read as little-endian, aligning with how it was written.
         }
 
         #endregion
@@ -307,9 +323,9 @@ namespace ENetDriver.Data
                 ExpandCapacity();
             }
 
-            // Convert ulong to array of size 8, then copy directly into main byte[].
-            byte[] temp = BitConverter.GetBytes(value);
-            Buffer.BlockCopy(temp, 0, Bytes, Length, 8);
+            // To avoid allocating new memory, create a span at our current byte[] index and directly copy bytes.
+            Span<byte> target = Bytes.AsSpan(Length, 8);                // Span starts at Length, which is next empty index.
+            BinaryPrimitives.WriteUInt64LittleEndian(target, value);    // We will use little-endian format, as is standard.
             Length += 8;
 
             return this;
@@ -325,7 +341,9 @@ namespace ENetDriver.Data
                 throw new IndexOutOfRangeException("Cannot read ulong - index out of range.");
             }
 
-            return BitConverter.ToUInt64(Bytes, Length);
+            // Use ReadOnlySpan insted of BitConverter to avoid endian-ness issues and potential array slice GC.
+            ReadOnlySpan<byte> target = Bytes.AsSpan(Length, 8);        // We have already decremented length, so index is correct.
+            return BinaryPrimitives.ReadUInt64LittleEndian(target);     // Read as little-endian, aligning with how it was written.
         }
 
         #endregion
@@ -339,9 +357,9 @@ namespace ENetDriver.Data
                 ExpandCapacity();
             }
 
-            // Convert float to array of size 4, then copy directly into main byte[].
-            byte[] temp = BitConverter.GetBytes(value);
-            Buffer.BlockCopy(temp, 0, Bytes, Length, 4);
+            // To avoid allocating new memory, create a span at our current byte[] index and directly copy bytes.
+            Span<byte> target = Bytes.AsSpan(Length, 4);                // Span starts at Length, which is next empty index.
+            BinaryPrimitives.WriteSingleLittleEndian(target, value);    // We will use little-endian format, as is standard.
             Length += 4;
 
             return this;
@@ -357,7 +375,9 @@ namespace ENetDriver.Data
                 throw new IndexOutOfRangeException("Cannot read float - index out of range.");
             }
 
-            return BitConverter.ToSingle(Bytes, Length);
+            // Use ReadOnlySpan insted of BitConverter to avoid endian-ness issues and potential array slice GC.
+            ReadOnlySpan<byte> target = Bytes.AsSpan(Length, 4);        // We have already decremented length, so index is correct.
+            return BinaryPrimitives.ReadSingleLittleEndian(target);     // Read as little-endian, aligning with how it was written.
         }
 
         #endregion
@@ -371,9 +391,9 @@ namespace ENetDriver.Data
                 ExpandCapacity();
             }
 
-            // Convert double to array of size 8, then copy directly into main byte[].
-            byte[] temp = BitConverter.GetBytes(value);
-            Buffer.BlockCopy(temp, 0, Bytes, Length, 8);
+            // To avoid allocating new memory, create a span at our current byte[] index and directly copy bytes.
+            Span<byte> target = Bytes.AsSpan(Length, 8);                // Span starts at Length, which is next empty index.
+            BinaryPrimitives.WriteDoubleLittleEndian(target, value);    // We will use little-endian format, as is standard.
             Length += 8;
 
             return this;
@@ -389,7 +409,9 @@ namespace ENetDriver.Data
                 throw new IndexOutOfRangeException("Cannot read double - index out of range.");
             }
 
-            return BitConverter.ToDouble(Bytes, Length);
+            // Use ReadOnlySpan insted of BitConverter to avoid endian-ness issues and potential array slice GC.
+            ReadOnlySpan<byte> target = Bytes.AsSpan(Length, 8);        // We have already decremented length, so index is correct.
+            return BinaryPrimitives.ReadDoubleLittleEndian(target);     // Read as little-endian, aligning with how it was written.
         }
 
         #endregion
@@ -420,7 +442,9 @@ namespace ENetDriver.Data
                 throw new IndexOutOfRangeException("Cannot read byte - index out of range.");
             }
 
-            return (Bytes[Length] == 1);
+            // Use ReadOnlySpan instead of direct access to avoid allocation on large byte[] buffers.
+            ReadOnlySpan<byte> target = Bytes.AsSpan(Length, 1);    // Length has already been decremented so index is accurate.
+            return (target[0] == 0x01);
         }
 
         #endregion
@@ -435,19 +459,20 @@ namespace ENetDriver.Data
             //    throw new ArgumentException("Argument string cannot be longer than 127 characters in length.");
             //}
 
-            // Convert string into dynamic-sized byte[], then copy directly into main byte[].
-            byte[] temp = Encoding.UTF8.GetBytes(value);
+            // Get byte count of string and create span of that length, used to write to the buffer without allocation.
+            int stringByteCount = Encoding.UTF8.GetByteCount(value);
+            Span<byte> target = Bytes.AsSpan(Length, stringByteCount + 1);  // Extra byte for length appended to data.
 
-            if (Length + temp.Length > Bytes.Length)
+            // Use while loop here to allow multiple expansions if necessary.
+            while (Length + stringByteCount + 1 > Bytes.Length)
             {
                 ExpandCapacity();
             }
 
-            Buffer.BlockCopy(temp, 0, Bytes, Length, temp.Length);
-            Length += temp.Length;
-
-            // Add byte for string length immediately after string.
-            AddByte((byte)temp.Length);
+            // Use encoding class to directly copy message payload into span, then append string byte[] length.
+            Encoding.UTF8.GetBytes(value, target);          // Will write entire span EXCEPT last byte.
+            target[^1] = (byte)stringByteCount;             // Write directly to last byte in span.
+            Length += target.Length;
 
             return this;
         }
@@ -465,7 +490,9 @@ namespace ENetDriver.Data
                 throw new IndexOutOfRangeException("Cannot read string - index out of range.");
             }
 
-            return Encoding.UTF8.GetString(Bytes, Length, strLen);
+            // Use ReadOnlySpan to allow native string slicing without allocation.
+            ReadOnlySpan<byte> target = Bytes.AsSpan(Length, strLen);   // We have already decremented length, so index is correct.
+            return Encoding.UTF8.GetString(target);                     // Read entire span because the length and data are correct.
         }
 
         #endregion
