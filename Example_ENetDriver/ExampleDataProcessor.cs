@@ -55,12 +55,13 @@ namespace Example_ENetDriver
         {
             LogMessage($"[COMMAND] Sending message to peer with id {id}...");
 
-            // Add null terminator to string, then use ArrayBuffer class to generate byte[] and enqueue.
+            // Add null terminator to string, then use ArrayBuilder class to generate byte[] and enqueue.
             message += '\0';
-            ArrayBuffer buffer = new ArrayBuffer(message.Length * 2)
-                .AddString(message);
+            (byte[] bytes, int length) = new ArrayBuilder(message.Length * 2)
+                .AddString(message)
+                .Build();
 
-            NetSendObject obj = NetSendObject.CreateForMessage(id, buffer.Bytes, buffer.Length);
+            NetSendObject obj = NetSendObject.CreateForMessage(id, bytes, length);
             EnqueueOneOutgoing(obj);
         }
     }

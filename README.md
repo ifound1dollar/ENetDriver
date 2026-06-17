@@ -14,28 +14,34 @@ The library consists of three main classes which handle most application logic. 
 Additionally, a handful of data objects are used by the library to communicate data between the data processor and server threads, and to allow high-efficiency byte[] creation for outgoing messages. These classes are NetSendObject (for outgoing commands/messages), NetRecvObject (for incoming commands/messages), and ArrayBuffer (for efficiently assembling byte[]s to send over the network).
 1. **NetSendObject:** Used for outgoing commands/messages. These objects *cannot* be instantiated directly, and instead require the use of a handful of static methods within the class. These static methods correspond to the type of outgoing command/message to send, and are prefixed with "CreateFor_". For example, CreateForConnect() creates and returns a NetSendObject with only the necessary data to make an outgoing connection request (remote IP, remote port, and an optional uint for request data). Likewise, the CreateForMessage() method accepts a payload byte[] with associated length and other message-relevant data.
 2. **NetRecvObject:** Has many of the same fields as the NetSendObject class, but is generated internally by the ENet server class and thus *does not* have public "CreateFor_" methods. Instead, the user only needs to read data from these objects in order to determine what logic to execute. The most important piece of this class is the ENetAction enum field, which determines whether the incoming command is for connect, disconnect, timeout, or message. The user should switch on this enum and route logic accordingly.
-3. **ArrayBuffer:** This class exists exclusively to allow high-efficiency byte[] creation that minimizes memory allocations by using an arbitrary-length byte[] internally with a separate integer for length (the byte[] might be length 1024, but the dedicated Length integer will correctly describe that its length may only be 76). The ArrayBuffer is entirely mutable and is designed to be used with fluent syntax, as it allows adding and reading different types of primitive data in a fully-abstracted way. The user should create new EMPTY instance of this class (which allows setting a specific byte[] size OR defaulting to 1024) each time they want to send a message with a payload, adding items in a specific order. The recipient should create a POPULATED instance of this class from the existing byte[], then reading items in the exact reverse order as they were created. It is the user's responsibility to ensure that the sender and receiver know exactly which order to add/read elements in. NOTE: The internal byte[] will resize itself during adding if it is not large enough to fit the data, and an exception will be thrown if the user tries to read an element which there is not enough room for (IndexOutOfRangeException).
+3. **ArrayBuilder:** This class exists exclusively to allow high-efficiency byte[] creation that minimizes memory allocations by using an arbitrary-length byte[] internally with a separate integer for length (the byte[] might be length 1024, but the dedicated Length integer will correctly describe that its length may only be 76). The ArrayBuilder, as the name indicates, implements the builder pattern to write various data (primitive types and strings) to the byte[] buffer; all logic to write data is entirely abstracted from the user. Additionally, the internal byte[] buffer will automatically expand its size if data is attempted to be added that the buffer does not have room for. Once all desired data is written, the Build() method must be called to return the buffer as a raw byte[] alongside its data length. Because arrays are inherently mutable, the ArrayBuilder instance should be discarded immediately after the Build() method is called in order to prevent accidental modification of the internal byte[].
+4. **ArrayReader:** This is the counterpart to the ArrayBuilder, and is used to efficiently read primitive data (and strings) from a provided payload byte[]. The ArrayReader requires a byte[] and a data length integer upon instantiation, and then each piece of data should be read from the object in the *exact reverse order* from which it was written (ex. add double -> add string -> read string -> read double). The developer must know which order the data was written to use this effectively, but that is often the case when working with raw-serialized data received over a network. If a piece of data is attempted to be read that does not exist in the reader (i.e. the buffer does not contain enough bytes for the requested data), an IndexOutOfBoundsException will be thrown.
 
-### ArrayBuffer examples
-Create empty ArrayBuffer and add a few items:
+### ArrayBuilder and ArrayReader examples
+Use the ArrayBuilder to serialize data into a byte[]:
 ```csharp
 // Instantiate using default constructor, which allocates a byte[] of size 1024.
 // Can use overloaded constructor to initialize byte[] to a specific size.
-ArrayBuffer buffer = new ArrayBuffer()
+(byte[] payload, int length) = new ArrayBuilder()
   .AddString("A string")
   .AddBool(true)
-  .AddDouble(10.0d);
+  .AddDouble(10.0d)
+  .Build();
+
+// Enqueue the payload and send over the network...
 ```
-Create populated ArrayBuffer from payload byte[] and read items into variables:
+Use the ArrayReader to read data from a byte[]:
 ```csharp
-// Instantiate using overloaded construtor which accepts a byte[] and length integer.
-ArrayBuffer buffer = new ArrayBuffer(payloadBytes, payloadLength);
+// Instantiate with received byte[] and its data length as an integer.
+ArrayReader reader = new ArrayReader(payloadBytes, payloadLength);
 
 // Read items into variables in the EXACT reverse order they were added.
 // Will throw IndexOutOfRangeException if invalid read (wrong order, wrong type, or wrong number of elements).
-double d0 = buffer.ReadDouble();    // 10.0d
-bool b0 = buffer.ReadBool();        // true
-string s0 = buffer.ReadString();    // "A string"
+double d0 = reader.ReadDouble();    // 10.0d
+bool b0 = reader.ReadBool();        // true
+string s0 = reader.ReadString();    // "A string"
+
+// Do something with the deserialized data...
 ```
 
 ___
