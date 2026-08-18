@@ -7,7 +7,7 @@ This library is essentially a plug-and-play multithreaded wrapper around the ENe
 Ultimately, this library works by running two separate threads for data processing and for ENet host/listener tasks. These threads communicate via an inter-thread messaging system which avoids the risks and potential pitfalls that can occur with multithreading. This inter-thread messaging system is largely abstracted from the user, requiring only a concrete implementation of the data processor class and a few calls to public methods in the Driver class (see below). IMPORTANT: The two threads used by the data processor and the ENet server are separate from the main thread, meaning that the developer must ensure that the main thread remains running while the server is active.
 
 The library consists of three main classes which handle most application logic. These three classes handle threading operations, data processing, and ENet host/listener tasks.
-1. **Driver:** This is the main driver class which the user will be working with to initialize and run the ENet server. This class has only a handful of publicly-facing methods which the application developer will interact with, as the rest of the logic is internal or private and is used for abstracted logic. A high-level summary is that the Driver class manages two separate worker threads: one for data processing (user-defined logic) and one for ENet host/listener tasks (completely abstracted from the user). Upon calling the Initialize() method, the Driver initializes the ENet native library and accepts an existing concrete data processor class (see below) alongside a server configuration settings object which determines how the server operates. Calling the Start() method will start up both the data processor and the server threads, which begins listening and processing data according to the user-defined logic described below.
+1. **Driver:** This is the main driver class which the user will be working with to initialize and run the ENet server. This class has only a handful of publicly-facing methods which the application developer will interact with, as the rest of the logic is internal or private and is used for abstracted logic. A high-level summary is that the Driver class manages two separate worker threads: one for data processing (user-defined logic) and one for ENet host/listener tasks (completely abstracted from the user). Upon calling the Initialize() method, the Driver initializes the ENet native library and accepts an existing concrete data processor class (see below) alongside a server configuration settings object which determines how the server operates. Calling the Start() or Run()/RunAsync() method will start up both the data processor and the server threads, which begins listening and processing data according to the user-defined logic described below. The Start() method does not block and thus requires the user to explicitly ensure the application remains running while threads are running; the Run() and RunAsync() methods block/await until the threads stop. The Stop() method is a non-blocking operation which begins the stop process in the background. The WaitUntilStopped() and WaitUntilStoppedAsync() methods can be used after the Start() method is called to start the threads non-blocking.
 2. **ENet Server:** This is the internal ENet host/listener class which is entirely abstracted from the user, performing networking operations and automatically passing them to the data processor as they are received; similarly, it handles sending outgoing messages coming from the data processor. The driver manages this class instance entirely, from creation to starting/stopping execution. Internally, the server creates an ENet host and configures it according to the server configuration settings object that must be passed into the Driver class on initialization. Configuration settings for this class include a listening port, a maximum number of peers that can be connected, a maximum number of communication channels, peer timeout settings, and time limits for incoming/outgoing contexts (to prevent high CPU usage when switching contexts each frame OR from getting stuck in one context indefinitely during heavy traffic). All ENet-specific actions are handled internally within this class.
 3. **(Abstract) Data Processor:** This abstract class implements the internal, behind-the-scenes functionality that is required for application execution. It handles enqueueing and dequeueing items from the thread-safe queues (BlockingCollections), as well as actually dispatching incoming commands/messages in a way that the user can easily work with. The purpose behind this abstract class is to ensure that the user does not need to work directly with multithreading, instead allowing them to focus on application logic. Importantly, this abstract class only handles internal logic and thus does *not* implement any application logic; the developer must create a concrete data processor class deriving from this abstract class which handles application logic. The user needs only to override the handler methods to process incoming connect, disconnect, timeout, and message events. Additionally, the data processor runs on a separate thread from the main thread, and the user's concrete implementation must be careful to ensure thread safety (ex. if processing incoming messages asynchronously). That said, the default Enqueue() method which adds an outgoing command/message data object to the thread-safe queue is inherently thread-safe and can be used by any thread.
 
@@ -133,20 +133,23 @@ ServerConfig serverConfig = new ServerConfig.Builder()
   .Build();
 ```
 
-### EXAMPLE: Driver initialization and start
+### EXAMPLE: Driver initialization and start non-blocking
 ```csharp
 var driver = ENetDriver.Driver.Instance;
 driver.Initialize(processor, serverConfig);
-driver.StartThreadedOperations();
+driver.Start();
 
 // After starting threaded operations, the main thread must remain running until the driver is stopped and de-initialized.
+
+//driver.Run();     // Use Run() instead of Start() to start threads and block until they stop.
 ```
 
 ### EXAMPLE: Driver stop and de-initialization
 ```csharp
 // SOME MAIN THREAD BLOCKING LOGIC ABOVE
 
-driver.StopThreadedOperations();    // Threads stop gracefully in the background, this method does not block.
+driver.Stop();              // Threads stop gracefully in the background, this method does not block.
+driver.WaitUntilStopped();  // Blocks until the threads successfully stop.
 driver.Deinitialize();
 ```
 

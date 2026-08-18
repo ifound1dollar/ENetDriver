@@ -170,6 +170,11 @@ namespace ENetDriver
 
         #region Default Methods
 
+        /// <summary>
+        /// Enqueues a single outgoing data object, to be sent to the peer specified in the NetSendObject. This
+        ///  method is thread-safe.
+        /// </summary>
+        /// <param name="sendObject"> The constructed object containing peer info and all desired data. </param>
         protected void EnqueueOneOutgoing(NetSendObject sendObject)
         {
             netSendQueue.Add(sendObject);

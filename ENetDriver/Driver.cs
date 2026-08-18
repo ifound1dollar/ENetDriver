@@ -42,7 +42,7 @@ namespace ENetDriver
 
         // ----- END DESCRIPTION ----- //
 
-        public enum State { Uninitialized, Initialized, Running, Stopped }
+        public enum State { Uninitialized, Initialized, Running, Stopping, Stopped }
 
         #region Singleton Stuff
 
@@ -72,11 +72,11 @@ namespace ENetDriver
         private ProcessThreadWorker _processThreadWorker = null!;
         private NetworkThreadWorker _networkThreadWorker = null!;
 
-        private State _state;
+        private volatile State _state;
 
 
 
-        #region Public: Initialization/Deinitialization and Start/Stop
+        #region Public: Initialization / Deinitialization Methods
 
         /// <summary>
         /// Initializes the Driver and the underlying ENet native library. Requires a configured instance of a
@@ -92,15 +92,14 @@ namespace ENetDriver
             // Throw exception if Driver has already been initialized.
             if (_state != State.Uninitialized)
             {
-                throw new InvalidOperationException("Cannot initialize driver again once it has already been initialized.");
+                Console.WriteLine("[WARN] Cannot initialize driver again once it has already been initialized.");
+                return;
             }
 
             // Initialize ENet and thread workers, then set Driver state.
             ENet.Library.Initialize();
-
             _processThreadWorker = new ProcessThreadWorker(processorInstance);
             _networkThreadWorker = new NetworkThreadWorker(serverConfig);
-
             _state = State.Initialized;
         }
 
@@ -110,27 +109,54 @@ namespace ENetDriver
         /// </summary>
         public void Deinitialize()
         {
-            ENet.Library.Deinitialize();
+            // Throw exception if currently running or actively stopping, or uninitialized.
+            if (_state  == State.Uninitialized)
+            {
+                Console.WriteLine("[WARN] Cannot deinitialize driver which has not been initialized.");
+                return;
+            }
+            else if (_state == State.Running)
+            {
+                Console.WriteLine("[WARN] Cannot deinitialize driver while currently running. Please stop threads first.");
+                return;
+            }
+            else if (_state == State.Stopping)
+            {
+                Console.WriteLine("[WARN] Cannot deinitialize driver while actively stopping. Please wait until fully stopped.");
+                return;
+            }
 
+            // De-initialize ENet library, then set Driver state.
+            ENet.Library.Deinitialize();
             _state = State.Uninitialized;
         }
 
+        #endregion
+
+        #region Public: Start / Stop / Run / Wait Methods
+
         /// <summary>
-        /// Starts worker threads for data processing and network operations. IMPORTANT: This method simply starts the
-        ///  threads, but does not block. It is the responsibility of the caller to keep the application running while
-        ///  threaded operations are active.
+        /// Starts background worker threads for data processing and network operations. This method is non-blocking,
+        ///  meaning the user must ensure the application remains running after calling this method. To start threads
+        ///  and block/await until stopped, use Run() or RunAsync().
         /// </summary>
-        public void StartThreadedOperations()
+        public void Start()
         {
             // Verify proper state.
             if (_state == State.Uninitialized)
             {
-                throw new InvalidOperationException("Cannot start threads before Driver is properly initialized. State: "
-                    + _state.ToString());
+                Console.WriteLine("[WARN] Cannot start threads before Driver is initialized.");
+                return;
             }
             else if (_state == State.Running)
             {
-                throw new InvalidOperationException("Threaded operations are already running. State: " + _state.ToString());
+                Console.WriteLine("[WARN] Cannot start threads which are already running.");
+                return;
+            }
+            else if (_state == State.Stopping)
+            {
+                Console.WriteLine("[WARN] Cannot start threads while actively stopping. Please wait until fully stopped.");
+                return;
             }
 
             // Starts each threaded operation (one for data processing, one for network) here.
@@ -141,24 +167,94 @@ namespace ENetDriver
         }
 
         /// <summary>
-        /// Stops data processor and network worker threads gracefully. IMPORTANT: Threads stop gracefully in the background,
-        ///  this method does not block. It returns immediately while threads are shutting down.
+        /// Stops data processor and network worker threads gracefully. This method is non-blocking, with threads
+        ///  gracefully shutting down in the background. Use the WaitUntilStopped() or WaitUntilStoppedAsync()
+        ///  methods to block/await until threads are fully stopped. If threads were started using Run(), the
+        ///  Run() method will return automatically once threads are fully stopped.
         /// </summary>
-        public void StopThreadedOperations()
+        public void Stop()
         {
             // If state is not Running, cannot stop threads.
             if (_state != State.Running)
             {
-                throw new InvalidOperationException("Cannot stop threads which are not running. State: " + _state.ToString());
+                Console.WriteLine("[WARN] Cannot stop threads which are not running. State: " + _state.ToString());
+                return;
             }
 
-            // Stops each threaded operation gracefully. NetworkWorker should be stopped first to prevent any
-            //  incoming/outgoing messages immediately.
-            _networkThreadWorker.StopThread();
-            _processThreadWorker.StopThread();
+            // Immediately set state to Stopping to note that the driver is currently in the stop process.
+            _state = State.Stopping;
 
-            _state = State.Stopped;
+            // Run asynchronous task to stop threads, updating state once threads have successfully stopped.
+            Task.Run(async () =>
+            {
+                // The StopThread() methods block until Thread.Join() returns successfully.
+                _networkThreadWorker.StopThread();      // Stop network thread first to prevent incoming/outgoing messages.
+                _processThreadWorker.StopThread();
+
+                // After threads have successfully stopped, finally update state. This causes Wait() methods to return.
+                _state = State.Stopped;
+            });
         }
+
+        /// <summary>
+        /// Blocks the calling thread until the data processor and network threads are fully stopped. This method
+        ///  should be used whenever the Driver is started using Start() instead of Run() or RunAsync(), as
+        ///  calling Stop() without waiting may end application execution before the threads can safely stop.
+        /// </summary>
+        public void WaitUntilStopped()
+        {
+            // Continuously block the current thread while state is Running or Stopping.
+            while (_state == State.Running || _state == State.Stopping)
+            {
+                Thread.Sleep(1000);     // Sleep for 1s, meaning there could be up to a 1s delay before return.
+            }
+        }
+
+        /// <summary>
+        /// Awaits indefinitely until the data processor and network threads are fully stopped. This method
+        ///  should be used whenever the Driver is started using Start() instead of Run() or RunAsync(), as
+        ///  calling Stop() without waiting may end application execution before the threads can safely stop.
+        /// </summary>
+        public async Task WaitUntilStoppedAsync()
+        {
+            // IN THE FUTURE, USE CANCELLATION TOKEN INSTEAD FOR INSTANT RETURN.
+
+            // Continuously await with Task.Delay() while state is Running or Stopping.
+            while (_state == State.Running || _state == State.Stopping)
+            {
+                await Task.Delay(1000);
+            }
+        }
+
+        /// <summary>
+        /// Runs the driver synchronously, starting worker threads for data processing and network operations.
+        ///  This method blocks until the threads are successfully stopped using Stop(). To start the threads
+        ///  asynchronously without blocking or awaiting, use the Start() method.
+        /// </summary>
+        public void Run()
+        {
+            // Re-use Start() method to actually start threads. State will be Running after the method returns.
+            Start();
+
+            // After started, continuously block until threads are Stopped.
+            WaitUntilStopped();
+        }
+
+        /// <summary>
+        /// Runs the driver asynchronously, starting worker threads for data processing and network operations.
+        ///  This method awaits until the threads are successfully stopped using Stop(). To start the threads
+        ///  asynchronously without blocking or awaiting, use the Start() method.
+        /// </summary>
+        public async Task RunAsync()
+        {
+            // Re-use Start() method to actually start threads. State will be Running after the method returns.
+            Start();
+
+            // After started, continuously await until threads are Stopped.
+            await WaitUntilStoppedAsync();
+        }
+
+        
 
         #endregion
 
@@ -197,6 +293,7 @@ namespace ENetDriver
 
             /// <summary>
             /// Stops the worker thread, waiting for any remaining work to finish before joining and returning.
+            ///  This method blocks until Thread.Join() returns.
             /// </summary>
             internal void StopThread()
             {
@@ -242,7 +339,8 @@ namespace ENetDriver
             }
 
             /// <summary>
-            /// Stops the worker thread, waiting for server to shut down before joining and returning.
+            /// Stops the worker thread, waiting for server to shut down before joining and returning. This
+            ///  method blocks until Thread.Join() returns.
             /// </summary>
             internal void StopThread()
             {
