@@ -32,6 +32,11 @@ namespace ENetDriver.Config
             // Use init functionality in Builder.
         }
 
+        internal static ServerConfig Default()
+        {
+            return new Builder().Build();
+        }
+
 
 
         public class Builder

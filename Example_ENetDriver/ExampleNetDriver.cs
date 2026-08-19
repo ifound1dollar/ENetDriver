@@ -1,5 +1,4 @@
 ﻿using ENetDriver;
-using ENetDriver.Config;
 using ENetDriver.Data;
 using System;
 using System.Collections.Generic;
@@ -7,13 +6,8 @@ using System.Text;
 
 namespace Example_ENetDriver
 {
-    internal class ExampleDataProcessor : AbstractDataProcessor
+    public class ExampleNetDriver : NetDriverBase
     {
-        public ExampleDataProcessor(DataProcessorConfig config) : base(config)
-        {
-            // We must call base constructor with our config.
-        }
-
         protected override void ProcessIncomingData(NetRecvObject recvObject)
         {
             switch (recvObject.ActionType)
@@ -35,7 +29,8 @@ namespace Example_ENetDriver
                     }
                 case ENetAction.Message:
                     {
-                        LogMessage($"Message received from peer at {recvObject.PeerIP}. Message raw bytes: {recvObject.Bytes}");
+                        string str = (recvObject.Bytes == null) ? "[NULL PAYLOAD]" : Encoding.UTF8.GetString(recvObject.Bytes);
+                        LogMessage($"Message received from peer at {recvObject.PeerIP}. Message as string: {str}");
                         break;
                     }
             }
@@ -47,8 +42,7 @@ namespace Example_ENetDriver
         {
             LogMessage($"[COMMAND] Attempting to connect to remote host at {ip}:{port}...");
 
-            NetSendObject obj = NetSendObject.CreateForConnect(ip, port, 100u);
-            EnqueueOneOutgoing(obj);
+            ConnectToPeer(ip, port);
         }
 
         public void MessageOneRemoteHost(uint id, string message)
@@ -62,7 +56,7 @@ namespace Example_ENetDriver
                 .Build();
 
             NetSendObject obj = NetSendObject.CreateForMessage(id, bytes, length);
-            EnqueueOneOutgoing(obj);
+            SendMessage(obj);
         }
     }
 }

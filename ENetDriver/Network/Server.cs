@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 
 namespace ENetDriver.Network
 {
-    internal class ENetServer
+    internal class Server
     {
         #region Loop Cancellation
 
@@ -31,40 +31,24 @@ namespace ENetDriver.Network
 
         private bool isRunning = false;
 
-        // REQUIRED QUEUE REFERENCES
-        private BlockingCollection<NetSendObject> netSendQueue = null!;
-        private BlockingCollection<NetRecvObject> netRecvQueue = null!;
-
-        // CONFIGURATION
+        private readonly BlockingCollection<NetSendObject> netSendQueue;
+        private readonly BlockingCollection<NetRecvObject> netRecvQueue;
+        private Host serverHost;
         private ServerConfig config;
-        private Host serverHost = null!;
 
         // PEER CONTAINERS
         private readonly Dictionary<uint, PeerData> clientsById = [];
         private readonly Dictionary<string, PeerData> clientsByAddress = [];
 
-        internal ENetServer(ServerConfig config)
+        internal Server(BlockingCollection<NetSendObject> netSendQueue, BlockingCollection<NetRecvObject> netRecvQueue)
         {
-            this.config = config;
+            this.netSendQueue = netSendQueue;
+            this.netRecvQueue = netRecvQueue;
+            config = ServerConfig.Default();
+            serverHost = new();                 // EMPTY, NO CONFIGURATION YET.
         }
 
-        /// <summary>
-        /// Gets the network port that this server is configured to listen on. Will not return a valid port until
-        ///  SetConfiguration() is called (will return 0).
-        /// </summary>
-        /// <returns> The network port that this server will listen on, or 0 if not yet configured. </returns>
-        internal ushort GetPort()
-        {
-            // Returns port if serverConfig is non-null (using null-conditional operator ?.), else returns 0 (using null-coalescing operator ??).
-            return config?.Port ?? 0;
-        }
-
-        /// <summary>
-        /// Gets the configuration object (ServerConfig) used by this server. Returns null if called before
-        ///  SetConfiguration() is called.
-        /// </summary>
-        /// <returns></returns>
-        public ServerConfig GetConfiguration()
+        internal ServerConfig GetConfiguration()
         {
             return config;
         }
@@ -74,14 +58,19 @@ namespace ENetDriver.Network
         #region Setup / Start / Stop Operations
 
         /// <summary>
-        /// Sets references to thread-safe queues.
+        /// Sets the configuration for this network host. Configuration can be changed as long as the host
+        ///  is not actively running.
         /// </summary>
-        /// <param name="netSendQueue"> Reference to network send BlockingCollection. </param>
-        /// <param name="netRecvQueue"> Reference to network receive BlockingCollection. </param>
-        internal void SetQueueReferences(BlockingCollection<NetSendObject> netSendQueue, BlockingCollection<NetRecvObject> netRecvQueue)
+        /// <param name="config"> The constructed ServerConfig object. </param>
+        internal void SetConfiguration(ServerConfig config)
         {
-            this.netSendQueue = netSendQueue;
-            this.netRecvQueue = netRecvQueue;
+            if (isRunning)
+            {
+                config.Logger.Invoke("[WARN] Cannot set server configuration while host is running.");
+                return;
+            }
+
+            this.config = config;
         }
 
         /// <summary>
@@ -96,10 +85,12 @@ namespace ENetDriver.Network
                     " call SetQueueReferences() and SetConfiguration() before starting server.");
             }
 
-            // Create server host with address, port, and other Host arguments.
+            // Create address object with port from ServerConfig object.
             Address address = default;
             address.Port = config.Port;
-            serverHost = new();
+
+            // Create server host with address, port, and other host config. Re-instantiate in case it was disposed earlier.
+            serverHost??= new();
             // No bandwidth limits (0u for both), and use default enet.h buffer size (1024*1024).
             serverHost.Create(address, config.PeerLimit, config.ChannelLimit, 0u, 0u, 1024*1024);
 
@@ -109,8 +100,8 @@ namespace ENetDriver.Network
         /// <summary>
         /// Stops the server Host, performing shutdown operations like disconnecting all connected peers (blocks while disconnecting).
         /// </summary>
-        /// <param name="serviceDelay"> How long to run the (blocking) host service to wait for peer disconnect ACKs. </param>
-        private void Stop(int serviceDelay = 3)
+        /// <param name="serviceDelayMs"> How long to run the (blocking) host service to wait for peer disconnect ACKs. </param>
+        private void Stop(int serviceDelayMs = 3000)
         {
             // Disconnect all clients and wait 3 seconds for disconnect ACKs.
             foreach (var peerData in clientsById)
@@ -120,7 +111,7 @@ namespace ENetDriver.Network
             }
 
             // Run host service for serviceDelay seconds, waiting for peers (clients) to ACK disconnect command.
-            while (serverHost.Service(serviceDelay * 1000, out Event netEvent) > 0)
+            while (serverHost.Service(serviceDelayMs, out Event netEvent) > 0)
             {
                 switch (netEvent.Type)
                 {

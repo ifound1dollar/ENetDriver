@@ -10,58 +10,77 @@ namespace Example_ENetDriver
 
         static void Main()
         {
-            Driver driver = Driver.Instance;
+            ushort port = GetPortFromUser();
 
-            // Stop driver when cancel key is pressed. Processes SIGINT signal.
-            Console.CancelKeyPress += (sender, e) =>
+            // Create custom NetDriver instance.
+            ExampleNetDriver netDriver = new();
+
+            // Register CancelKeyPress event to stop driver asynchronously when Ctrl+C is triggered. Processes SIGINT.
+            //Console.CancelKeyPress += (sender, e) =>
+            //{
+            //    e.Cancel = true;        // Do not immediately exit (allow graceful stop).
+            //    netDriver.Stop();       // Initiates stop but does not block.
+            //};
+
+            // Create configuration objects for the NetDriver.
+            NetDriverConfig netDriverConfig = new NetDriverConfig.Builder()
+                .SetPollTimeIntervals(10, 100)
+                //.SetHealthLoggingInterval(10)
+                .Build();
+            ServerConfig serverConfig = new ServerConfig.Builder()
+                .SetPort(port)
+                .SetPeerLimit(64)
+                .SetChannelLimit(2)
+                .SetPeerTimeoutSettings(5000, 5, 10000, 30000)
+                .SetPollTimeIntervals(10, 100)
+                .Build();
+
+            // Initialize the NetDriver.
+            netDriver.Initialize(netDriverConfig, serverConfig);
+
+            // Run input loop on separate thread (NetDriver public actions are thread-safe).
+            Task.Run(() => RunInputLoop(netDriver));
+
+            // Run the NetDriver. Runs on the main thread, blocking until the driver stops.
+            netDriver.Run();
+
+            // After the NetDriver returns (has stopped gracefully), de-initialize before return.
+            netDriver.Deinitialize();
+        }
+
+        static void RunInputLoop(ExampleNetDriver netDriver)
+        {
+            string? userInput;
+            string[]? inputSplit;
+            while (true)
             {
-                e.Cancel = true;    // Do not immediately exit (allow graceful stop).
-                driver.Stop();
-            };
+                // Get input and split into array.
+                userInput = Console.ReadLine();
+                if (userInput == null) continue;
+                inputSplit = userInput.ToLower().Split(' ');
 
-            try
-            {
-                // First, ask user for port to run on.
-                ushort userPort = GetPortFromUser();
+                // If exit command, stop driver (non-blocking) and exit input loop.
+                if (userInput == "e" || userInput == "exit" || userInput == "q" || userInput == "quit" || userInput == "stop")
+                {
+                    netDriver.Stop();
+                    break;
+                }
+                // If input starts with connect, attempt to connect to peer at port.
+                else if (inputSplit.Length > 0 && inputSplit[0] == "connect")
+                {
+                    if (inputSplit.Length < 2) continue;
 
-                // Create ExampleDataProcessor instance with custom config.
-                DataProcessorConfig dataProcessorConfig = new DataProcessorConfig.Builder()
-                    .SetPollTimeIntervals(10, 100)
-                    //.SetHealthLoggingInterval(10)
-                    .Build();
-                ExampleDataProcessor processor = new(dataProcessorConfig);
-
-                // Create server config.
-                ServerConfig serverConfig = new ServerConfig.Builder()
-                    .SetPort(userPort)
-                    .SetPeerLimit(64)
-                    .SetChannelLimit(2)
-                    .SetPeerTimeoutSettings(5000, 5, 10000, 30000)
-                    .SetPollTimeIntervals(10, 100)
-                    .Build();
-
-                // Initialize the driver with the data processor instance and server config.
-                driver.Initialize(processor, serverConfig);
-
-                // Call the Run() method, which blocks until threads successfully stop.
-                //driver.Run();
-
-                // Finally, de-initialize driver before exit.
-                //driver.Deinitialize();
-
-
-
-                // Start threads but allow input loop, PRIMARILY FOR TESTING.
-                RunWithInputLoop(driver, processor);
+                    if (ushort.TryParse(inputSplit[1], out ushort port))
+                    {
+                        netDriver.ConnectToRemoteHost("127.0.0.1", port);
+                    }
+                }
+                // Else if no recognized command, send raw text message to first connected peer.
+                else
+                {
+                    netDriver.MessageOneRemoteHost(0, userInput);
+                }
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[EXCEPTION] :: {ex}");
-
-                driver.Stop();
-                driver.WaitUntilStopped();
-                driver.Deinitialize();
-            }            
         }
 
         static ushort GetPortFromUser()
@@ -82,43 +101,5 @@ namespace Example_ENetDriver
             return userPort;
         }
 
-        static void RunWithInputLoop(Driver driver, ExampleDataProcessor processor)
-        {
-            // Start driver non-blocking.
-            driver.Start();
-
-            // INPUT LOOP
-            string? userInput;
-            string[]? inputSplit;
-            while (true)
-            {
-                userInput = Console.ReadLine();
-                if (userInput == null) continue;
-                inputSplit = userInput.ToLower().Split(' ');
-
-                if (userInput == "e" || userInput == "exit" || userInput == "q" || userInput == "quit" || userInput == "stop")
-                {
-                    break;
-                }
-                else if (inputSplit.Length > 0 && inputSplit[0] == "connect")
-                {
-                    if (inputSplit.Length < 2) continue;
-
-                    if (ushort.TryParse(inputSplit[1], out ushort port))
-                    {
-                        processor.ConnectToRemoteHost("127.0.0.1", port);
-                    }
-                }
-                else
-                {
-                    processor.MessageOneRemoteHost(0, userInput);
-                }
-            }
-
-            // Stop and de-initialize on normal exit.
-            driver.Stop();
-            driver.WaitUntilStopped();
-            driver.Deinitialize();
-        }
     }
 }

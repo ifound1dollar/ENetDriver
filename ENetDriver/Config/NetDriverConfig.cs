@@ -4,7 +4,7 @@ using System.Text;
 
 namespace ENetDriver.Config
 {
-    public class DataProcessorConfig
+    public class NetDriverConfig
     {
         // OPTIONAL POLL (RUN) TIME LIMITS
         public required int MaxPollTimeMS { get; init; }
@@ -16,9 +16,14 @@ namespace ENetDriver.Config
         // HEALTH LOGGING INTERVAL
         public required uint HealthLoggingInterval { get; init; }
 
-        private DataProcessorConfig()
+        private NetDriverConfig()
         {
             // Use init functionality in Builder.
+        }
+
+        public static NetDriverConfig Default()
+        {
+            return new Builder().Build();
         }
 
 
@@ -86,9 +91,9 @@ namespace ENetDriver.Config
             /// Constructs and returns a new DataProcessorConfig object using the Builder.
             /// </summary>
             /// <returns> The newly-constructed DataProcessorConfig object. </returns>
-            public DataProcessorConfig Build()
+            public NetDriverConfig Build()
             {
-                return new DataProcessorConfig()
+                return new NetDriverConfig()
                 {
                     MinPollTimeMS = minPollTimeMS,
                     MaxPollTimeMS = maxPollTimeMS,
