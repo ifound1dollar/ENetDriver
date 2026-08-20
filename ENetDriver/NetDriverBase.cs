@@ -127,7 +127,7 @@ namespace ENetDriver
         /// </summary>
         /// <param name="netDriverConfig"> The configuration settings that will be used for data processing logic. </param>
         /// <param name="serverConfig"> The configuration settings that will be used by the server host. </param>
-        public void Initialize(NetDriverConfig netDriverConfig, ServerConfig serverConfig)
+        public void Initialize(NetDriverConfig? netDriverConfig = null, ServerConfig? serverConfig = null)
         {
             // Throw exception if Driver has already been initialized.
             if (_state != State.Uninitialized)
@@ -139,10 +139,10 @@ namespace ENetDriver
             // Set state immediately for thread-safety purposes.
             _state = State.Initialized;
 
-            // Initialize ENet and thread workers, then set Driver state.
+            // Initialize ENet library, then set configs if configuration settings were provided (else leave default).
             ENet.Library.Initialize();
-            _networkThreadWorker.SetConfig(serverConfig);
-            _config = netDriverConfig;
+            if (netDriverConfig != null) _config = netDriverConfig;
+            if (serverConfig != null) _networkThreadWorker.SetConfig(serverConfig);
         }
 
         /// <summary>
