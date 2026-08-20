@@ -55,7 +55,7 @@ namespace Example_ENetDriver
                 .AddString(message)
                 .Build();
 
-            NetSendObject obj = NetSendObject.CreateForMessage(id, bytes, length);
+            NetSendObject obj = NetSendObject.CreateMessage(id, bytes, length);
             SendMessage(obj);
         }
     }

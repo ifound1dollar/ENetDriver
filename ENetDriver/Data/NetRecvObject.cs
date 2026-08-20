@@ -1,5 +1,4 @@
-﻿using ENetDriver;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -72,7 +71,7 @@ namespace ENetDriver.Data
 
 
 
-        #region Static CreateFrom_ Methods
+        #region Public Static: Create (From) Methods
 
         /// <summary>
         /// Creates and returns a new NetRecvObject from an incoming connect event. Bytes, Length, and ChannelID
@@ -83,7 +82,7 @@ namespace ENetDriver.Data
         /// <param name="peerPort"> Port number of the peer that just connected. </param>
         /// <param name="data"> Data uint containing basic data describing the new connection (ex. 32-bit checksum). </param>
         /// <returns> The newly constructed NetRecvObject from the incoming connect event. </returns>
-        public static NetRecvObject CreateFromConnect(uint peerId, string peerIp, ushort peerPort, uint data)
+        public static NetRecvObject FromConnect(uint peerId, string peerIp, ushort peerPort, uint data)
         {
             // Return a new NetRecvObject from the incoming connect event, not including byte[] payload.
             return new NetRecvObject(ENetAction.Connect, peerId, peerIp, peerPort, data);
@@ -98,7 +97,7 @@ namespace ENetDriver.Data
         /// <param name="peerPort"> Port of the peer that just disconnected. </param>
         /// <param name="data"> Data uint describing the disconnect action (ex. disconnect code). </param>
         /// <returns> The newly constructed NetRecvObject from the incoming disconnect event. </returns>
-        public static NetRecvObject CreateFromDisconnect(uint peerId, string peerIp, ushort peerPort, uint data)
+        public static NetRecvObject FromDisconnect(uint peerId, string peerIp, ushort peerPort, uint data)
         {
             // Return a new NetRecvObject from the incoming disconnect event, not including byte[] payload.
             return new NetRecvObject(ENetAction.Disconnect, peerId, peerIp, peerPort, data);
@@ -115,7 +114,7 @@ namespace ENetDriver.Data
         /// <param name="peerPort"> Port of the peer that just timed out. </param>
         /// <param name="data"> Data uint describing the disconnect action (ex. timeout disconnect code). </param>
         /// <returns> The newly constructed NetRecvObject from the incoming disconnect event. </returns>
-        public static NetRecvObject CreateFromTimeout(uint peerId, string peerIp, ushort peerPort, uint data)
+        public static NetRecvObject FromTimeout(uint peerId, string peerIp, ushort peerPort, uint data)
         {
             // Return a new NetRecvObject from the incoming disconnet event, including user-provided data uint.
             return new NetRecvObject(ENetAction.Timeout, peerId, peerIp, peerPort, data);
@@ -131,7 +130,7 @@ namespace ENetDriver.Data
         /// <param name="bytes"> Byte[] containing packet payload data. </param>
         /// <param name="length"> Length of data contained in byte[] (in case array is larger than data length). </param>
         /// <param name="channelId"> Channel ID byte that the message was received on. </param>
-        public static NetRecvObject CreateFromMessage(uint peerId, string peerIp, ushort peerPort, byte[] bytes, int length, byte channelId)
+        public static NetRecvObject FromMessage(uint peerId, string peerIp, ushort peerPort, byte[] bytes, int length, byte channelId)
         {
             // Return a new NetRecvObject with message byte[] payload, length, and channel ID, but no Data uint.
             return new NetRecvObject(ENetAction.Message, peerId, peerIp, peerPort, bytes, length, channelId);

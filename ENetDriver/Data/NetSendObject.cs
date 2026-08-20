@@ -1,5 +1,4 @@
-﻿using ENetDriver;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -75,7 +74,7 @@ namespace ENetDriver.Data
 
 
 
-        #region Static CreateFor_ Methods
+        #region Public Static: Create Methods
 
         /// <summary>
         /// Creates and returns a new NetSendObject for a connect action. Bytes, Length, ChannelID, and Reliable
@@ -85,7 +84,7 @@ namespace ENetDriver.Data
         /// <param name="peerPort"> Port number of the peer to connect to. </param>
         /// <param name="data"> Data uint containing basic data describing the connection attempt (ex. 32-bit checksum). </param>
         /// <returns> The newly constructed NetSendObject for an outgoing connection attempt. </returns>
-        public static NetSendObject CreateForConnect(string peerIp, ushort peerPort, uint data)
+        public static NetSendObject CreateConnect(string peerIp, ushort peerPort, uint data)
         {
             // Return new non-message NetSendObject, leaving peerId 0 because it is irrelevant for outgoing connect attempt.
             return new NetSendObject(ENetAction.Connect, 0, peerIp, peerPort, data);
@@ -99,7 +98,7 @@ namespace ENetDriver.Data
         /// <param name="peerId"> ID of the peer to disconnect. This must be a known valid peer ID. </param>
         /// <param name="data"> Data uint containing basic data describing the disconnect action (ex. disconnect code). </param>
         /// <returns> The newly constructed NetSendObject for an outgoing disconnect action. </returns>
-        public static NetSendObject CreateForDisconnect(uint peerId, uint data)
+        public static NetSendObject CreateDisconnect(uint peerId, uint data)
         {
             // Return new non-message NetSendObject with disconnect ENetAction. IP and Port are not defined.
             return new NetSendObject(ENetAction.Disconnect, peerId, string.Empty, 0, data);
@@ -117,7 +116,7 @@ namespace ENetDriver.Data
         /// <param name="peerPort"> Port number of the peer to disconnect (optional). </param>
         /// <param name="data"> Data uint containing basic data describing the disconnect action (ex. disconnect code). </param>
         /// <returns> The newly constructed NetSendObject for an outgoing disconnect action. </returns>
-        public static NetSendObject CreateForDisconnect(uint peerId, string peerIp, ushort peerPort, uint data)
+        public static NetSendObject CreateDisconnect(uint peerId, string peerIp, ushort peerPort, uint data)
         {
             // Return new non-message NetSendObject with disconnect ENetAction.
             return new NetSendObject(ENetAction.Disconnect, peerId, peerIp, peerPort, data);
@@ -134,7 +133,7 @@ namespace ENetDriver.Data
         /// <param name="channelId"> OPTIONAL Channel ID (byte) to send the message on. Default 0. </param>
         /// <param name="reliable"> OPTIONAL Flag determining whether to send the message reliably. Default true. </param>
         /// <returns> The newly constructed NetSendObject for an outgoing message. </returns>
-        public static NetSendObject CreateForMessage(uint peerId, byte[] bytes, int length, byte channelId = 0, bool reliable = true)
+        public static NetSendObject CreateMessage(uint peerId, byte[] bytes, int length, byte channelId = 0, bool reliable = true)
         {
             // Return a new message NetSendObject with byte[] payload and length, plus channel ID and reliable flag.
             // IP and Port are not defined.
@@ -156,7 +155,7 @@ namespace ENetDriver.Data
         /// <param name="channelId"> OPTIONAL Channel ID (byte) to send the message on. Default 0. </param>
         /// <param name="reliable"> OPTIONAL Flag determining whether to send the message reliably. Default true. </param>
         /// <returns> The newly constructed NetSendObject for an outgoing message. </returns>
-        public static NetSendObject CreateForMessage(uint peerId, string peerIp, ushort peerPort, byte[] bytes, int length,
+        public static NetSendObject CreateMessage(uint peerId, string peerIp, ushort peerPort, byte[] bytes, int length,
             byte channelId = 0, bool reliable = true)
         {
             // Return a new message NetSendObject with byte[] payload and length, plus channel ID and reliable flag.

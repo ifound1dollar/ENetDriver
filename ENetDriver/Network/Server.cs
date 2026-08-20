@@ -1,5 +1,4 @@
 ﻿using ENet;
-using ENetDriver;
 using ENetDriver.Config;
 using ENetDriver.Data;
 using System;
@@ -325,7 +324,7 @@ namespace ENetDriver.Network
             peer.Timeout(config.PeerTimeoutPingAttemptLimit, config.PeerTimeoutMinimumMS, config.PeerTimeoutMaximumMS);
 
             // Create new NetRecvObject and enqueue for data processing.
-            NetRecvObject obj = NetRecvObject.CreateFromConnect(peer.ID, peer.IP, peer.Port, connectEvent.Data);
+            NetRecvObject obj = NetRecvObject.FromConnect(peer.ID, peer.IP, peer.Port, connectEvent.Data);
             netRecvQueue.Add(obj);
         }
 
@@ -342,11 +341,11 @@ namespace ENetDriver.Network
             NetRecvObject obj;
             if (!isTimeout)
             {
-                obj = NetRecvObject.CreateFromDisconnect(peer.ID, peer.IP, peer.Port, netEvent.Data);
+                obj = NetRecvObject.FromDisconnect(peer.ID, peer.IP, peer.Port, netEvent.Data);
             }
             else
             {
-                obj = NetRecvObject.CreateFromTimeout(peer.ID, peer.IP, peer.Port, 400u);
+                obj = NetRecvObject.FromTimeout(peer.ID, peer.IP, peer.Port, 400u);
             }
             netRecvQueue.Add(obj);
         }
@@ -360,7 +359,7 @@ namespace ENetDriver.Network
             netEvent.Packet.CopyTo(bytes);
 
             // Create NetRecvObject from received packet and enqueue to be handled by DataProcessor.
-            NetRecvObject obj = NetRecvObject.CreateFromMessage(peer.ID, peer.IP, peer.Port, bytes, bytes.Length, netEvent.ChannelID);
+            NetRecvObject obj = NetRecvObject.FromMessage(peer.ID, peer.IP, peer.Port, bytes, bytes.Length, netEvent.ChannelID);
             netRecvQueue.Add(obj);
 
             // Finally, dispose the packet to free memory. Dispose as final operation as safe practice.

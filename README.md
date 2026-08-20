@@ -16,6 +16,8 @@ Additionally, a handful of data objects are used by the library to communicate d
 3. **ArrayBuilder:** This class exists exclusively to allow high-efficiency byte[] creation that minimizes memory allocations by using an arbitrary-length byte[] internally with a separate integer for length (the byte[] might be 1024 allocated bytes, but the dedicated Length integer will correctly describe that the data length is only 76 bytes). The ArrayBuilder, as the name indicates, implements the builder pattern to write various data (primitive types and strings) to the byte[] buffer; all logic to write data is entirely abstracted from the user. Additionally, the internal byte[] buffer will automatically expand its size if data is attempted to be added that the buffer does not have room for. Once all desired data is written, the Build() method must be called to return the buffer as a raw byte[] alongside its data length. Because the array that was contained in the buffer is returned by reference, the ArrayBuilder instance should be discarded immediately after the Build() method is called in order to prevent accidental modification of the referenced byte[].
 4. **ArrayReader:** This is the counterpart to the ArrayBuilder, and is used to efficiently read primitive data (and strings) from a provided payload byte[]. The ArrayReader requires a byte[] and a data length integer upon instantiation, and then each piece of data should be read from the object in the *exact reverse order* from which it was written (ex. add double -> add string =>> read string -> read double). The developer must know which order the data was written to use this effectively, but that is often the case when working with raw-serialized data received over a network. If a piece of data is attempted to be read that does not exist in the reader (i.e. the buffer does not contain enough bytes for the requested data), an IndexOutOfBoundsException will be thrown.
 
+Lastly, the library includes an interface that can be used by any class which needs to be serialized and deserialized to/from a byte[]. The INetSerializable interface includes two methods: NetSerialize() to serialize the object into a byte[] and return the array and its length as an integer, and NetDeserialize() to deserialize a byte[] and associated length into a usable object (note that the deserialize method should be called on an empty object after construction). This interface makes serializing and deserializing objects particularly easy. The user is expected to override both methods to write/read all data to/from an ArrayBuilder or ArrayReader (examples below).
+
 ### ArrayBuilder and ArrayReader examples
 Use the ArrayBuilder to serialize data into a byte[]:
 ```csharp
@@ -162,4 +164,30 @@ netDriver.Run()
 netDriver.Deinitialize();
 ```
 
+### EXAMPLE: Custom serializable data object
+```csharp
+public class ExampleSerializableObject : INetSerializable
+{
+    public string ExampleString { get; private set; } = "A string";
+    public bool ExampleBool { get; private set; } = true;
+    public double ExampleDouble { get; private set; } = 10.0d;
 
+    public (byte[], int) NetSerialize()
+    {
+        // Create ArrayBuilder and add all relevant data, returning the resulting byte[] and length.
+        return new ArrayBuilder()
+            .AddString(ExampleString)
+            .AddBool(ExampleBool)
+            .AddDouble(ExampleDouble)
+            .Build();
+    }
+    public void NetDeserialize(byte[] bytes, int length)
+    {
+        // Create ArrayReader from the passed-in byte[] and length, then read values in reverse order.
+        var reader = new ArrayReader(bytes, length);
+        ExampleDouble = reader.ReadDouble();
+        ExampleBool = reader.ReadBool();
+        ExampleString = reader.ReadString();
+    }
+}
+```

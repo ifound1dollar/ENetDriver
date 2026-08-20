@@ -66,7 +66,7 @@ namespace ENetDriver
                 return;
             }
 
-            NetSendObject obj = NetSendObject.CreateForConnect(ip, port, 100u);
+            NetSendObject obj = NetSendObject.CreateConnect(ip, port, 100u);
             _netSendQueue.Add(obj);
         }
 
@@ -84,7 +84,7 @@ namespace ENetDriver
 
             }
 
-            NetSendObject obj = NetSendObject.CreateForDisconnect(peerId, 200u);
+            NetSendObject obj = NetSendObject.CreateDisconnect(peerId, 200u);
             _netSendQueue.Add(obj);
         }
 
