@@ -80,14 +80,14 @@ namespace ENetDriver.Data
         /// Creates and returns a new NetSendObject for a connect action. Bytes, Length, ChannelID, and Reliable
         ///  remain empty (null or 0 or false), and PeerID will be generated later on connection success.
         /// </summary>
-        /// <param name="peerIp"> IP address (string) of the peer to connect to. </param>
+        /// <param name="peerHost"> Host or IP address (string) of the peer to connect to. </param>
         /// <param name="peerPort"> Port number of the peer to connect to. </param>
         /// <param name="data"> Data uint containing basic data describing the connection attempt (ex. 32-bit checksum). </param>
         /// <returns> The newly constructed NetSendObject for an outgoing connection attempt. </returns>
-        public static NetSendObject CreateConnect(string peerIp, ushort peerPort, uint data)
+        public static NetSendObject CreateConnect(string peerHost, ushort peerPort, uint data)
         {
             // Return new non-message NetSendObject, leaving peerId 0 because it is irrelevant for outgoing connect attempt.
-            return new NetSendObject(ENetAction.Connect, 0, peerIp, peerPort, data);
+            return new NetSendObject(ENetAction.Connect, 0, peerHost, peerPort, data);
         }
 
         /// <summary>

@@ -65,6 +65,11 @@ namespace Example_ENetDriver
                     netDriver.Stop();
                     break;
                 }
+                // If input is "dc", disconnect from first peer.
+                else if (userInput == "dc")
+                {
+                    netDriver.DisconnectFromPeer(0);
+                }
                 // If input starts with connect, attempt to connect to peer at port.
                 else if (inputSplit.Length > 0 && inputSplit[0] == "connect")
                 {
@@ -72,7 +77,7 @@ namespace Example_ENetDriver
 
                     if (ushort.TryParse(inputSplit[1], out ushort port))
                     {
-                        netDriver.ConnectToRemoteHost("127.0.0.1", port);
+                        netDriver.ConnectToRemoteHost("services.edranagame.com", port);
                     }
                 }
                 // Else if no recognized command, send raw text message to first connected peer.

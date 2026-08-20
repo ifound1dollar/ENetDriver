@@ -316,8 +316,8 @@ namespace ENetDriver.Network
 
             // Add new PeerData to both Dictionaries (special data like state does not matter to us here).
             PeerData peerData = new(peer);
-            clientsById.Add(peer.ID, peerData);
-            clientsByAddress.Add(key, peerData);
+            clientsById[peer.ID] = peerData;
+            clientsByAddress[key] = peerData;
 
             // Set ping interval and timeout parameters for the Peer.
             peer.PingInterval(config.PeerTimeoutPingIntervalMS);
@@ -380,7 +380,7 @@ namespace ENetDriver.Network
         {
             // Create Address object with IP and Port from NetSendObject.
             Address remoteAddress = new();
-            remoteAddress.SetIP(netSendObject.PeerIP);
+            remoteAddress.SetHost(netSendObject.PeerIP);
             remoteAddress.Port = netSendObject.PeerPort;
 
             // Try to connect to peer, catching InvalidOperationException if queueing the connect attempt fails.

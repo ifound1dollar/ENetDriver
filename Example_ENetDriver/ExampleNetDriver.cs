@@ -29,8 +29,17 @@ namespace Example_ENetDriver
                     }
                 case ENetAction.Message:
                     {
-                        string str = (recvObject.Bytes == null) ? "[NULL PAYLOAD]" : Encoding.UTF8.GetString(recvObject.Bytes);
-                        LogMessage($"Message received from peer at {recvObject.PeerIP}. Message as string: {str}");
+                        if (recvObject.Bytes != null)
+                        {
+                            string str = Encoding.UTF8.GetString(recvObject.Bytes, 0, recvObject.Length - 1);   // Ignore last char.
+                            string bytes = string.Concat(recvObject.Bytes.Select(item => item.ToString("X2") + " "));
+
+                            LogMessage($"Message received from peer at {recvObject.PeerIP}:{recvObject.PeerPort}. Message as string: {str}\n"
+                                + $"Raw bytes: {bytes}");
+                            break;
+                        }
+
+                        LogMessage($"Message received from peer at {recvObject.PeerIP}:{recvObject.PeerPort}. NO DATA.");
                         break;
                     }
             }
