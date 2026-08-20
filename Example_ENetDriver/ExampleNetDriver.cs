@@ -14,17 +14,17 @@ namespace Example_ENetDriver
             {
                 case ENetAction.Connect:
                     {
-                        LogMessage($"New connection with peer at {recvObject.PeerIP}!");
+                        LogMessage($"New connection with peer at {recvObject.PeerIP}:{recvObject.PeerPort}.");
                         break;
                     }
                 case ENetAction.Disconnect:
                     {
-                        LogMessage($"Disconnected from peer at {recvObject.PeerIP}.");
+                        LogMessage($"Disconnected from peer at {recvObject.PeerIP}:{recvObject.PeerPort}.");
                         break;
                     }
                 case ENetAction.Timeout:
                     {
-                        LogMessage($"Timed out from peer at {recvObject.PeerIP}.");
+                        LogMessage($"Timed out from peer at {recvObject.PeerIP}:{recvObject.PeerPort}.");
                         break;
                     }
                 case ENetAction.Message:
